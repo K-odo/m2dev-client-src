@@ -3303,8 +3303,8 @@ bool CPythonNetworkStream::RecvGuild()
 	{
 		case GUILD_SUBHEADER_GC_LOGIN:
 		{
-			DWORD dwPID;
-			if (!Recv(sizeof(DWORD), &dwPID))
+			uint32_t dwPID;
+			if (!Recv(sizeof(uint32_t), &dwPID))
 				return false;
 
 			// Messenger
@@ -3318,8 +3318,8 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_LOGOUT:
 		{
-			DWORD dwPID;
-			if (!Recv(sizeof(DWORD), &dwPID))
+			uint32_t dwPID;
+			if (!Recv(sizeof(uint32_t), &dwPID))
 				return false;
 
 			// Messenger
@@ -3333,7 +3333,7 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_REMOVE:
 		{
-			DWORD dwPID;
+			uint32_t dwPID;
 			if (!Recv(sizeof(dwPID), &dwPID))
 				return false;
 
@@ -3539,7 +3539,7 @@ bool CPythonNetworkStream::RecvGuild()
 			BYTE byLevel;
 			if (!Recv(sizeof(byLevel), &byLevel))
 				return false;
-			DWORD dwEXP;
+			uint32_t dwEXP;
 			if (!Recv(sizeof(dwEXP), &dwEXP))
 				return false;
 			CPythonGuild::Instance().SetGuildEXP(byLevel, dwEXP);
@@ -3549,7 +3549,7 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_CHANGE_MEMBER_GRADE:
 		{
-			DWORD dwPID;
+			uint32_t dwPID;
 			if (!Recv(sizeof(dwPID), &dwPID))
 				return false;
 			BYTE byGrade;
@@ -3578,7 +3578,7 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_CHANGE_MEMBER_GENERAL:
 		{
-			DWORD dwPID;
+			uint32_t dwPID;
 			if (!Recv(sizeof(dwPID), &dwPID))
 				return false;
 			BYTE byFlag;
@@ -3592,7 +3592,7 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_GUILD_INVITE:
 		{
-			DWORD dwGuildID;
+			uint32_t dwGuildID;
 			if (!Recv(sizeof(dwGuildID), &dwGuildID))
 				return false;
 			char szGuildName[GUILD_NAME_MAX_LEN+1];
@@ -3648,7 +3648,7 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_GUILD_NAME:
 		{
-			DWORD dwID;
+			uint32_t dwID;
 			char szGuildName[GUILD_NAME_MAX_LEN+1];
 
 			int iPacketSize = int(GuildPacket.size) - sizeof(GuildPacket);
@@ -3675,8 +3675,8 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_GUILD_WAR_LIST:
 		{
-			DWORD dwSrcGuildID;
-			DWORD dwDstGuildID;
+			uint32_t dwSrcGuildID;
+			uint32_t dwDstGuildID;
 
 			int iPacketSize = int(GuildPacket.size) - sizeof(GuildPacket);
 			int nItemSize = sizeof(dwSrcGuildID) + sizeof(dwDstGuildID);
@@ -3700,8 +3700,8 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_GUILD_WAR_END_LIST:
 		{
-			DWORD dwSrcGuildID;
-			DWORD dwDstGuildID;
+			uint32_t dwSrcGuildID;
+			uint32_t dwDstGuildID;
 
 			int iPacketSize = int(GuildPacket.size) - sizeof(GuildPacket);
 			int nItemSize = sizeof(dwSrcGuildID) + sizeof(dwDstGuildID);
@@ -3738,7 +3738,7 @@ bool CPythonNetworkStream::RecvGuild()
 		}
 		case GUILD_SUBHEADER_GC_MONEY_CHANGE:
 		{
-			DWORD dwMoney;
+			uint32_t dwMoney;
 			if (!Recv(sizeof(dwMoney), &dwMoney))
 				return false;
 
