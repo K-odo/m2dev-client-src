@@ -56,6 +56,8 @@ public:
 
 	void SetMusicVolume(float volume);
 
+	float GetMusicVolume() const;
+
 	void SaveVolume(bool isMinimized);
 
 	void RestoreVolume();
@@ -66,8 +68,6 @@ public:
 
 	void SetListenerOrientation(float forwardX, float forwardY, float forwardZ,
 								float upX, float upY, float upZ);
-
-	void SetListenerVelocity(float x, float y, float z);
 
 	void Update();
 

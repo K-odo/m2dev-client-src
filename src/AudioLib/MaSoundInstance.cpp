@@ -143,13 +143,14 @@ void MaSoundInstance::Fade(float toVolume, float secDurationFromMinMax)
 	toVolume = std::clamp<float>(toVolume, 0.0f, 1.0f);
 	m_FadeTargetVolume = toVolume;
 
-	float rate = 1.0f / 61.0f / secDurationFromMinMax;
+	float rate = 1.0f / CS_CLIENT_FPS / secDurationFromMinMax;
 	m_FadeRatePerFrame = GetVolume() > toVolume ? -rate : rate;
 }
 
 void MaSoundInstance::StopFading()
 {
 	m_FadeRatePerFrame = 0.0f;
+	m_FadeTargetVolume = 0.0f;
 }
 
 bool MaSoundInstance::IsFading() const
@@ -157,17 +158,17 @@ bool MaSoundInstance::IsFading() const
 	return m_FadeRatePerFrame != 0.0f;
 }
 
-void MaSoundInstance::Update(float volumeFactor) // volume factor is the user's volume
+void MaSoundInstance::Update()
 {
 	if (m_FadeRatePerFrame != 0.0f)
 	{
-		float targetVolume = std::clamp<float>(m_FadeTargetVolume * volumeFactor, 0.0f, 1.0f);
-		float volume = std::clamp<float>(GetVolume() + (m_FadeRatePerFrame * volumeFactor), 0.0f, 1.0f);
+		float targetVolume = std::clamp<float>(m_FadeTargetVolume, 0.0f, 1.0f);
+		float volume = std::clamp<float>(GetVolume() + m_FadeRatePerFrame, 0.0f, 1.0f);
 		if ((m_FadeRatePerFrame > 0.0f && volume >= targetVolume) || (m_FadeRatePerFrame < 0.0f && volume <= targetVolume))
 		{
-			volume = m_FadeTargetVolume * volumeFactor;
+			volume = m_FadeTargetVolume;
 			m_FadeRatePerFrame = 0.0f;
-			if (volume <= 0.0f)
+			if (m_FadeTargetVolume <= 0.0f)
 				ma_sound_stop(&m_Sound);
 		}
 		ma_sound_set_volume(&m_Sound, volume);

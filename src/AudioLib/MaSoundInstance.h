@@ -42,7 +42,7 @@ public:
 
 	bool IsFading() const;
 
-	void Update(float volumeFactor = 1.0f);
+	void Update();
 
 private:
 	std::string m_Identity;

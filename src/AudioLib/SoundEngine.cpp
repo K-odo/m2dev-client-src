@@ -154,11 +154,13 @@ void SoundEngine::FadeOutAllMusic()
 void SoundEngine::SetMusicVolume(float volume)
 {
 	m_MusicVolume = std::clamp<float>(volume, 0.0f, 1.0f);
-	for (auto& music : m_Music)
-	{
-		if (music.IsInitialized() && !music.IsFading()) // fading music will update itself
-			music.SetVolume(m_MusicVolume);
-	}
+	m_Music[m_CurrentMusicIndex].StopFading();
+	m_Music[m_CurrentMusicIndex].SetVolume(m_MusicVolume);
+}
+
+float SoundEngine::GetMusicVolume() const
+{
+	return m_MusicVolume;
 }
 
 void SoundEngine::SaveVolume(bool isMinimized)
@@ -203,15 +205,10 @@ void SoundEngine::SetListenerOrientation(float forwardX, float forwardY, float f
 	ma_engine_listener_set_world_up(&m_Engine, 0, upX, -upY, upZ);
 }
 
-void SoundEngine::SetListenerVelocity(float x, float y, float z)
-{
-	ma_engine_listener_set_velocity(&m_Engine, 0, x, y, z);
-}
-
 void SoundEngine::Update()
 {
 	for (auto& music : m_Music)
-		music.Update(m_MusicVolume);
+		music.Update();
 
 	if (m_MasterVolumeFadeRatePerFrame)
 	{
