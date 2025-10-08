@@ -140,11 +140,12 @@ void MaSoundInstance::Config3D(bool toggle, float minDist, float maxDist)
 
 void MaSoundInstance::Fade(float toVolume, float secDurationFromMinMax)
 {
-	toVolume = std::clamp<float>(toVolume, 0.0f, 1.0f);
-	m_FadeTargetVolume = toVolume;
-
-	float rate = 1.0f / CS_CLIENT_FPS / secDurationFromMinMax;
-	m_FadeRatePerFrame = GetVolume() > toVolume ? -rate : rate;
+	m_FadeTargetVolume = std::clamp<float>(toVolume, 0.0f, 1.0f);
+	if (m_FadeTargetVolume != GetVolume())
+	{
+		const float rate = 1.0f / CS_CLIENT_FPS / secDurationFromMinMax;
+		m_FadeRatePerFrame = GetVolume() > m_FadeTargetVolume ? -rate : rate;
+	}
 }
 
 void MaSoundInstance::StopFading()
