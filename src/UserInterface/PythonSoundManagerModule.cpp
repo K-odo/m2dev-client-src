@@ -36,7 +36,7 @@ PyObject* sndFadeInMusic(PyObject* poSelf, PyObject* poArgs)
 	if (!PyTuple_GetString(poArgs, 0, &szFileName))
 		return Py_BuildException();
 
-	SoundEngine::Instance().FadeInMusic(szFileName);
+	SoundEngine::Instance().FadeInMusic(szFileName, SoundEngine::Instance().GetMusicVolume());
 	return Py_BuildNone();
 }
 
