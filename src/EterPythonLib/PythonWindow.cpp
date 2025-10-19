@@ -5,6 +5,7 @@
 #include "PythonWindowManager.h"
 
 #include "EterLib/StateManager.h"
+#include "EterLib/ImGuiManager.h"
 
 BOOL g_bOutlineBoxEnable = FALSE;
 
@@ -236,7 +237,17 @@ namespace UI
 				CPythonGraphic::Instance().RenderBox2d(m_rect.left, m_rect.top, m_rect.right, m_rect.bottom);
 			}
 
-			std::for_each(m_pChildList.begin(), m_pChildList.end(), std::mem_fn(&CWindow::Render));
+			// Render children with ImGui flush between floating windows for correct z-order
+			for (auto* pChild : m_pChildList)
+			{
+				pChild->Render();
+
+				// Flush ImGui texts after each top-level floating window
+				if (pChild->IsFlag(CWindow::FLAG_FLOAT) && CImGuiManager::Instance().IsInitialized())
+				{
+					CImGuiManager::Instance().FlushAndRestart();
+				}
+			}
 		}
 		else 
 		{
@@ -248,7 +259,17 @@ namespace UI
 				CPythonGraphic::Instance().RenderBox2d(m_rect.left, m_rect.top, m_rect.right, m_rect.bottom);
 			}
 
-			std::for_each(m_pChildList.begin(), m_pChildList.end(), std::mem_fn(&CWindow::Render));
+			// Render children with ImGui flush between floating windows for correct z-order
+			for (auto* pChild : m_pChildList)
+			{
+				pChild->Render();
+
+				// Flush ImGui texts after each top-level floating window
+				if (pChild->IsFlag(CWindow::FLAG_FLOAT) && CImGuiManager::Instance().IsInitialized())
+				{
+					CImGuiManager::Instance().FlushAndRestart();
+				}
+			}
 		}
 	}
 
