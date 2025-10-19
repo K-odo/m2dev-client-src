@@ -422,8 +422,8 @@ bool Main(HINSTANCE hInstance, LPSTR lpCmdLine)
 		return false;
 	}
 
-	if(LocaleService_LoadGlobal(hInstance))
-		SetDefaultCodePage(LocaleService_GetCodePage());
+	// Locale is already loaded in ApplicationStringTable_Initialize via LocaleService_LoadConfig
+	// No need to call LocaleService_LoadGlobal which shows locale selection dialog
 
 	CPythonApplication * app = new CPythonApplication;
 

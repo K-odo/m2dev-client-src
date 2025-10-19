@@ -8,13 +8,13 @@ set_target_properties(UserInterface PROPERTIES LINK_FLAGS "/level='requireAdmini
 	OUTPUT_NAME_RELWITHDEBINFO "Metin2_RelWithDebInfo"
 )
 
-target_link_libraries(UserInterface 
+target_link_libraries(UserInterface
 	AudioLib
 	Discord
-	EffectLib 
-	EterBase 
-	EterGrnLib 
-	EterImageLib 
+	EffectLib
+	EterBase
+	EterGrnLib
+	EterImageLib
 	EterLib
 	EterLocale
 	EterPythonLib
@@ -24,19 +24,21 @@ target_link_libraries(UserInterface
 	SpeedTreeLib
 	SphereLib
 	PackLib
-	
+
 	cryptopp-static
 	lzo2
 	libzstd_static
 	mio
-	
+	imgui
+	freetype
+
 	DirectX
 	Granny
 	SpeedTree
 	Python
 	WebView
-	
-	ws2_32 
+
+	ws2_32
 	strmiids
 	amstrmid
 	dmoguids

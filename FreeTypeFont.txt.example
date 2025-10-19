@@ -1,0 +1,141 @@
+# ===================================================================
+# METIN2 CLIENT - FREETYPE FONT CONFIGURATION
+# ===================================================================
+# This file configures all fonts used in the game UI.
+# Save this as "FreeTypeFont.txt" in the game root directory.
+#
+# Documentation: See FREETYPE_FONT_CONFIG.md for full parameter reference
+# ===================================================================
+
+# ===================================================================
+# DEFAULT UI FONT (UI_DEF_FONT)
+# Used for: General UI text, descriptions, menus, buttons
+# ===================================================================
+FONT                 UI_DEF_FONT
+PATH                 font\Arial.ttf
+SIZE                 12.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.3
+ENABLE_OUTLINE       1
+OUTLINE_THICKNESS    1
+PIXEL_SNAP_H         1
+
+# ===================================================================
+# LARGE UI FONT (UI_DEF_FONT_LARGE)
+# Used for: Window titles, headers, important messages
+# ===================================================================
+FONT                 UI_DEF_FONT_LARGE
+PATH                 font\Arial.ttf
+SIZE                 14.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.2
+ENABLE_OUTLINE       1
+OUTLINE_THICKNESS    2
+PIXEL_SNAP_H         0
+
+# ===================================================================
+# SMALL UI FONT (UI_DEF_FONT_SMALL)
+# Used for: Small labels, timestamps, secondary info
+# ===================================================================
+FONT                 UI_DEF_FONT_SMALL
+PATH                 font\Arial.ttf
+SIZE                 9.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.4
+ENABLE_OUTLINE       1
+OUTLINE_THICKNESS    1
+PIXEL_SNAP_H         1
+
+
+# ===================================================================
+# CAN BE IMPROVED / DVELOPED BY
+# ===================================================================
+
+
+# ===================================================================
+# CHAT FONT (CHAT_FONT)
+# Used for: Chat window messages, player chat
+# ===================================================================
+FONT                 CHAT_FONT
+PATH                 font\Tahoma.ttf
+SIZE                 12.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.4
+ENABLE_OUTLINE       1
+OUTLINE_THICKNESS    1
+PIXEL_SNAP_H         1
+
+# ===================================================================
+# DAMAGE NUMBERS (DMG_FONT)
+# Used for: Floating combat damage numbers
+# ===================================================================
+FONT                 DMG_FONT
+PATH                 font\Arial.ttf
+SIZE                 16.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.5
+ENABLE_OUTLINE       1
+OUTLINE_THICKNESS    2
+PIXEL_SNAP_H         0
+
+# ===================================================================
+# PLAYER NAME FONT (NAME_FONT)
+# Used for: Player names above characters
+# ===================================================================
+FONT                 NAME_FONT
+PATH                 font\Arial.ttf
+SIZE                 13.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.3
+ENABLE_OUTLINE       1
+OUTLINE_THICKNESS    1
+PIXEL_SNAP_H         1
+
+# ===================================================================
+# TOOLTIP FONT (TOOLTIP_FONT)
+# Used for: Item tooltips, hover descriptions
+# ===================================================================
+FONT                 TOOLTIP_FONT
+PATH                 font\Arial.ttf
+SIZE                 13.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.2
+ENABLE_OUTLINE       0
+OUTLINE_THICKNESS    0
+PIXEL_SNAP_H         1
+
+# ===================================================================
+# QUEST FONT (QUEST_FONT)
+# Used for: Quest dialogs and text
+# ===================================================================
+FONT                 QUEST_FONT
+PATH                 font\Tahoma.ttf
+SIZE                 14.0
+OVERSAMPLE_H         4
+OVERSAMPLE_V         4
+RASTERIZER_MULTIPLY  1.2
+ENABLE_OUTLINE       0
+OUTLINE_THICKNESS    0
+PIXEL_SNAP_H         1
+
+# ===================================================================
+# NOTES:
+# ===================================================================
+# - Comments start with # or //
+# - Font paths are relative to game executable
+# - SIZE is in pixels (float)
+# - OVERSAMPLE_H/V: Higher = smoother (but slower). 4 is optimal.
+# - RASTERIZER_MULTIPLY: 1.0-1.5 recommended. Higher = brighter/bolder.
+# - ENABLE_OUTLINE: 0 = off, 1 = on
+# - OUTLINE_THICKNESS: 1-3 pixels recommended. Creates centered outline.
+# - PIXEL_SNAP_H: 1 = crisper small text, 0 = smoother large text
+#
+# Restart game after editing this file!
+# ===================================================================

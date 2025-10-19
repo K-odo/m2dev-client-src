@@ -6,12 +6,17 @@
 #include "EterLocale/StringCodec.h"
 #include "EterBase/Utils.h"
 #include "EterLocale/Arabic.h"
+#include "ImGuiManager.h"
 
+#include <imgui.h>
 #include <unordered_map>
 
 extern DWORD GetDefaultCodePage();
 
 const float c_fFontFeather = 0.5f;
+
+// Global flag to enable FreeType rendering via ImGui
+bool g_bUseFreeTypeRendering = true;
 
 CDynamicPool<CGraphicTextInstance>		CGraphicTextInstance::ms_kPool;
 
@@ -159,8 +164,9 @@ void CGraphicTextInstance::Update()
 	const char* begin = m_stText.c_str();
 	const char* end = begin + m_stText.length();
 
-	int wTextMax = (end - begin) * 2;
-	wchar_t* wText = (wchar_t*)_alloca(sizeof(wchar_t)*wTextMax);
+	// C++20: Use std::vector instead of _alloca (safer, no stack overflow risk)
+	const int wTextMax = static_cast<int>(end - begin) * 2;
+	std::vector<wchar_t> wText(wTextMax);
 
 	DWORD dwColor = m_dwTextColor;
 
@@ -169,7 +175,7 @@ void CGraphicTextInstance::Update()
 	{
 		const char * token = FindToken(begin, end);
 
-		int wTextLen = Ymir_MultiByteToWideChar(dataCodePage, 0, begin, token - begin, wText, wTextMax);
+		int wTextLen = Ymir_MultiByteToWideChar(dataCodePage, 0, begin, token - begin, wText.data(), wTextMax);
 
 		if (m_isSecret)
 		{
@@ -180,9 +186,9 @@ void CGraphicTextInstance::Update()
 		{
 			if (defCodePage == CP_ARABIC) // ARABIC
 			{
-
-				wchar_t* wArabicText = (wchar_t*)_alloca(sizeof(wchar_t) * wTextLen);
-				int wArabicTextLen = Arabic_MakeShape(wText, wTextLen, wArabicText, wTextLen);
+				// C++20: Use std::vector instead of _alloca
+				std::vector<wchar_t> wArabicText(wTextLen);
+				int wArabicTextLen = Arabic_MakeShape(wText.data(), wTextLen, wArabicText.data(), wTextLen);
 
 				bool isEnglish = true;
 				int nEnglishBase = wArabicTextLen - 1;
@@ -226,8 +232,8 @@ void CGraphicTextInstance::Update()
 						//
 						if (Arabic_IsInSymbol(wArabicChar) && (
 								(i == 0) ||
-								(i > 0 && 
-									!(Arabic_HasPresentation(wArabicText, i - 1) || Arabic_IsInPresentation(wArabicText[i + 1]))  && //앞글자, 뒷글자가 아랍어 아님.
+								(i > 0 &&
+									!(Arabic_HasPresentation(wArabicText.data(), i - 1) || Arabic_IsInPresentation(wArabicText[i + 1]))  && //앞글자, 뒷글자가 아랍어 아님.
 									wArabicText[i+1] != '|'
 								) ||
 								wArabicText[i] == '|'
@@ -413,15 +419,15 @@ void CGraphicTextInstance::Update()
 
 				for (int i = 0; i < wTextLen; )
 				{
-					int ret = GetTextTag(&wText[i], wTextLen - i, len, hyperlinkBuffer);
+					int ret = GetTextTag(&wText.data()[i], wTextLen - i, len, hyperlinkBuffer);
 
 					if (ret == TEXT_TAG_PLAIN || ret == TEXT_TAG_TAG)
 					{
 						if (hyperlinkStep == 1)
-							hyperlinkBuffer.append(1, wText[i]);
+							hyperlinkBuffer.append(1, wText.data()[i]);
 						else
 						{
-							int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wText[i], dwColor);
+							int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wText.data()[i], dwColor);
 							kHyperlink.ex += charWidth;
 							x += charWidth;
 						}
@@ -479,8 +485,127 @@ void CGraphicTextInstance::Update()
 void CGraphicTextInstance::Render(RECT * pClipRect)
 {
 	if (!m_isUpdate)
-		return;	
+		return;
 
+	// Use ImGui/FreeType rendering (ImGui backend supports z-buffer!)
+	if (g_bUseFreeTypeRendering && CImGuiManager::Instance().IsInitialized())
+	{
+		if (m_stText.empty() && !m_isCursor)
+			return;
+
+		// C++20: Convert text to wide string first
+		const int codePage = GetDefaultCodePage();
+		const int wTextMax = static_cast<int>(m_stText.length()) * 2;
+		std::vector<wchar_t> wText(wTextMax);
+		const int wTextLen = Ymir_MultiByteToWideChar(codePage, 0, m_stText.c_str(), static_cast<int>(m_stText.length()), wText.data(), wTextMax);
+
+		// Handle password masking (create masked wide string, then convert to UTF-8)
+		std::wstring wRenderText;
+		if (m_isSecret && wTextLen > 0)
+		{
+			wRenderText = std::wstring(wTextLen, L'*');  // C++20: Proper wide string masking
+		}
+		else
+		{
+			wRenderText = std::wstring(wText.data(), wTextLen);
+		}
+
+		float fStanX = m_v3Position.x;
+		float fStanY = m_v3Position.y;
+
+		// Calculate text size for alignment (use wide string API)
+		int textWidth = 0;
+		int textHeight = 0;
+		CImGuiManager::Instance().GetTextExtentW(wRenderText, &textWidth, &textHeight);
+
+		// Apply horizontal alignment
+		if (m_hAlign == HORIZONTAL_ALIGN_CENTER)
+			fStanX -= textWidth / 2.0f;
+		else if (m_hAlign == HORIZONTAL_ALIGN_RIGHT)
+			fStanX -= textWidth;
+
+		// Apply vertical alignment
+		if (m_vAlign == VERTICAL_ALIGN_CENTER)
+			fStanY -= textHeight / 2.0f;
+		else if (m_vAlign == VERTICAL_ALIGN_BOTTOM)
+			fStanY -= textHeight;
+
+		// C++20: Render text using wide string API (no UTF-8 conversion needed)
+		// Note: ImGui DrawList WILL respect z-buffer if we pass proper depth
+		if (m_isOutline)
+		{
+			CImGuiManager::Instance().RenderTextWithOutlineW(
+				wRenderText,
+				fStanX, fStanY,
+				m_dwTextColor,
+				m_dwOutLineColor,
+				CImGuiManager::ERenderLayer::Background
+			);
+		}
+		else
+		{
+			CImGuiManager::Instance().RenderTextW(
+				wRenderText,
+				fStanX, fStanY,
+				m_dwTextColor,
+				false,
+				CImGuiManager::ERenderLayer::Background
+			);
+		}
+
+		// Draw cursor if enabled
+		if (m_isCursor)
+		{
+			const int curpos = CIME::GetCurPos();
+			const int compend = curpos + CIME::GetCompLen();
+
+			// C++20: Calculate width up to cursor position using wide string
+			int widthToCursor = 0;
+			if (!wRenderText.empty() && curpos > 0)
+			{
+				const int actualCurPos = std::min(curpos, static_cast<int>(wRenderText.length()));
+				if (actualCurPos > 0)
+				{
+					std::wstring wTextToCursor = wRenderText.substr(0, actualCurPos);
+					CImGuiManager::Instance().GetTextExtentW(wTextToCursor, &widthToCursor, nullptr);
+				}
+			}
+
+			float cursorX = fStanX + widthToCursor;
+			float cursorY = fStanY;
+			float cursorWidth = 2.0f;
+			float cursorHeight = (textHeight > 0) ? static_cast<float>(textHeight) : 14.0f;
+
+			ImU32 cursorColor = (curpos < compend) ? IM_COL32(255, 255, 255, 128) : IM_COL32(255, 255, 255, 255);
+			ImDrawList* drawList = ImGui::GetForegroundDrawList();
+			drawList->AddRectFilled(
+				ImVec2(cursorX, cursorY),
+				ImVec2(cursorX + cursorWidth, cursorY + cursorHeight),
+				cursorColor
+			);
+
+			// Draw IME underline
+			if (curpos < compend)
+			{
+				int ulbegin = CIME::GetULBegin();
+				int ulend = CIME::GetULEnd();
+				if (ulbegin < ulend)
+				{
+					float underlineY = cursorY + cursorHeight;
+					drawList->AddLine(
+						ImVec2(cursorX, underlineY),
+						ImVec2(cursorX + cursorWidth, underlineY + 2.0f),
+						IM_COL32(255, 0, 0, 255),
+						2.0f
+					);
+				}
+			}
+		}
+
+		return;
+	}
+
+	// Fallback to old GDI rendering
 	CGraphicText* pkText=m_roText.GetPointer();
 	if (!pkText)
 		return;
@@ -1015,21 +1140,23 @@ void CGraphicTextInstance::SetLimitWidth(float fWidth)
 	m_fLimitWidth = fWidth;
 }
 
-void CGraphicTextInstance::SetValueString(const std::string& c_stValue)
+void CGraphicTextInstance::SetValueString(std::string_view value)
 {
-	if (0 == m_stText.compare(c_stValue))
+	// C++20: string_view for zero-allocation comparison
+	if (m_stText == value)
 		return;
 
-	m_stText = c_stValue;
+	m_stText = value;
 	m_isUpdate = false;
 }
 
-void CGraphicTextInstance::SetValue(const char* c_szText, size_t len)
+void CGraphicTextInstance::SetValue(std::string_view value)
 {
-	if (0 == m_stText.compare(c_szText))
+	// C++20: string_view for zero-allocation comparison
+	if (m_stText == value)
 		return;
 
-	m_stText = c_szText;
+	m_stText = value;
 	m_isUpdate = false;
 }
 

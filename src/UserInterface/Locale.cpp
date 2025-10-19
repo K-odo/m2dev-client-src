@@ -29,14 +29,26 @@ char	MULTI_LOCALE_NAME[256]		= "ymir";
 int		MULTI_LOCALE_CODE			= 949;
 int		MULTI_LOCALE_REPORT_PORT	= 10000;
 
+#if defined(LOCALE_SERVICE_GLOBAL)
+// Forward declare locale data table for LocaleService_LoadConfig
+struct SLOCALEDATA
+{
+	const char* szServiceName;
+	const char* szLocaleName;
+	WORD		wCodePage;
+	const char*	szSecurityKey;
+};
+extern SLOCALEDATA gs_stLocaleData[];
+#endif
+
 void LocaleService_LoadConfig(const char* fileName)
 {
 	NANOBEGIN
 	FILE* fp = fopen(fileName, "rt");
 
 	if (fp)
-	{		
-		char	line[256];			
+	{
+		char	line[256];
 		char	name[256];
 		int		code;
 		int		id;
@@ -49,7 +61,21 @@ void LocaleService_LoadConfig(const char* fileName)
 			MULTI_LOCALE_CODE				= code;
 			strcpy(MULTI_LOCALE_NAME, name);
 			sprintf(MULTI_LOCALE_PATH, "locale/%s", MULTI_LOCALE_NAME);
-		}			
+
+#if defined(LOCALE_SERVICE_GLOBAL)
+			// Find matching locale in gs_stLocaleData and set service name + security key
+			for(int i=0; gs_stLocaleData[i].szServiceName; i++) {
+				if(strcmp(gs_stLocaleData[i].szLocaleName, name) == 0) {
+					strcpy(MULTI_LOCALE_SERVICE, gs_stLocaleData[i].szServiceName);
+					if(gs_stLocaleData[i].szSecurityKey)
+						__SECURITY_KEY_STRING__ = gs_stLocaleData[i].szSecurityKey;
+					TraceError("LocaleService_LoadConfig: Loaded locale '%s' (service: %s, codepage: %d)",
+						name, gs_stLocaleData[i].szServiceName, code);
+					break;
+				}
+			}
+#endif
+		}
 		fclose(fp);
 	}
 	NANOEND
@@ -251,13 +277,7 @@ void LocaleService_ForceSetLocale(const char* name, const char* localePath)
 }
 
 #if defined(LOCALE_SERVICE_GLOBAL)
-struct SLOCALEDATA
-{
-	const char* szServiceName;
-	const char* szLocaleName;
-	WORD		wCodePage;
-	const char*	szSecurityKey;
-} gs_stLocaleData[] = {
+SLOCALEDATA gs_stLocaleData[] = {
 	{ LSS_YMIR,		"ymir",			949,	"testtesttesttest"	},		// Korea
 	{ LSS_EUROPE,	"de",			1252,	"1234abcd5678efgh"	},		// GameForge (Germany)
 	{ LSS_EUROPE,	"en",			1252,	"1234abcd5678efgh"	},		// GameForge (United Kingdom)

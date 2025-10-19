@@ -133,6 +133,7 @@ class CGraphicBase
 		static DWORD GetAvailableTextureMemory();
 		static const D3DXMATRIX& GetViewMatrix();
 		static const D3DXMATRIX & GetIdentityMatrix();
+		static LPDIRECT3DDEVICE9 GetD3DDevice() { return ms_lpd3dDevice; }
 
 		enum
 		{			

@@ -52,8 +52,8 @@ class CGraphicTextInstance
 		void SetVerticalAlign(int vAlign);
 		void SetMax(int iMax);
 		void SetTextPointer(CGraphicText* pText);
-		void SetValueString(const std::string& c_stValue);
-		void SetValue(const char* c_szValue, size_t len = -1);
+		void SetValueString(std::string_view value);  // C++20: Use string_view
+		void SetValue(std::string_view value);  // C++20: Use string_view
 		void SetPosition(float fx, float fy, float fz = 0.0f);
 		void SetSecret(bool Value);
 		void SetOutline(bool Value);

@@ -2,6 +2,7 @@
 #include "eterBase/Error.h"
 #include "eterlib/Camera.h"
 #include "eterlib/AttributeInstance.h"
+#include "eterlib/ImGuiManager.h"
 #include "gamelib/AreaTerrain.h"
 #include "EterGrnLib/Material.h"
 
@@ -537,10 +538,20 @@ bool CPythonApplication::Process()
 				CPythonBackground& rkBG = CPythonBackground::Instance();
 				rkBG.ReleaseCharacterShadowTexture();
 
-				if (m_pyGraphic.RestoreDevice())					
+				// Notify ImGui about lost device
+				if (CImGuiManager::Instance().IsInitialized())
+					CImGuiManager::Instance().OnLostDevice();
+
+				if (m_pyGraphic.RestoreDevice())
+				{
 					rkBG.CreateCharacterShadowTexture();
+
+					// Notify ImGui about device reset
+					if (CImGuiManager::Instance().IsInitialized())
+						CImGuiManager::Instance().OnResetDevice();
+				}
 				else
-					canRender = false;				
+					canRender = false;
 			}
 		}
 
@@ -572,8 +583,21 @@ bool CPythonApplication::Process()
 				// Interface
 				m_pyGraphic.SetInterfaceRenderState();
 
+				// ImGui BeginFrame BEFORE UI rendering to collect draw commands
+				if (CImGuiManager::Instance().IsInitialized())
+				{
+					CImGuiManager::Instance().BeginFrame();
+				}
+
 				OnUIRender();
 				OnMouseRender();
+
+				// ImGui EndFrame/Render AFTER UI rendering but BEFORE End() for proper z-order
+				if (CImGuiManager::Instance().IsInitialized())
+				{
+					CImGuiManager::Instance().EndFrame();
+					CImGuiManager::Instance().Render();
+				}
 				/////////////////////
 
 				m_pyGraphic.End();
@@ -1037,6 +1061,31 @@ bool CPythonApplication::Create(PyObject * poSelf, const char * c_szName, int wi
 		if (!CreateDevice(m_pySystem.GetWidth(), m_pySystem.GetHeight(), Windowed, m_pySystem.GetBPP(), m_pySystem.GetFrequency()))
 			return false;
 
+		// Initialize ImGui Manager (modern C++20 singleton - no CreateInstance needed)
+		if (CImGuiManager::Instance().Initialize(GetWindowHandle(), CGraphicBase::GetD3DDevice()))
+		{
+			// Try to load fonts from configuration file
+			if (!CImGuiManager::Instance().LoadFontsFromConfig("FreeTypeFont.txt"))
+			{
+				TraceError("Failed to load FreeTypeFont.txt - trying fallback fonts");
+
+				// Fallback: Try to load Arial.ttf manually
+				if (!CImGuiManager::Instance().LoadFont("UI_DEF_FONT", "font\\Arial.ttf", 14.0f, false))
+				{
+					TraceError("Failed to load font\\Arial.ttf - trying Tahoma.ttf");
+					if (!CImGuiManager::Instance().LoadFont("UI_DEF_FONT", "font\\Tahoma.ttf", 16.0f, false))
+					{
+						TraceError("Failed to load font\\Tahoma.ttf - continuing with default ImGui font");
+					}
+				}
+			}
+		}
+		else
+		{
+			TraceError("Failed to initialize ImGui Manager");
+			// No need to destroy - singleton will be cleaned up automatically
+		}
+
 		GrannyCreateSharedDeformBuffer();
 
 		if (m_pySystem.IsAutoTiling())
@@ -1221,6 +1270,9 @@ void CPythonApplication::Clear()
 
 void CPythonApplication::Destroy()
 {
+	// Shutdown ImGui Manager (modern C++20 singleton will auto-cleanup)
+	CImGuiManager::Instance().Shutdown();
+
 	// SphereMap
 	CGrannyMaterial::DestroySphereMap();
 
