@@ -32,27 +32,31 @@ enum class EFreeTypeQuality : unsigned int
 };
 
 // Font configuration structure
+// C++20: Simplified config - only manual size and outline on/off
+// All other parameters are auto-calculated based on size for optimal quality
 struct SFontConfig
 {
 	std::string name;              // Font name (UI_DEF_FONT, UI_DEF_FONT_LARGE, etc.)
 	std::string path;              // Path to TTF file
-	float size;                    // Font size in pixels
-	int oversampleH;               // Horizontal oversampling (default: 4)
-	int oversampleV;               // Vertical oversampling (default: 4)
-	float rasterizerMultiply;      // Brightness multiplier (default: 1.2)
-	bool enableOutline;            // Enable outline rendering
-	int outlineThickness;          // Outline thickness in pixels (1-3)
-	bool pixelSnapH;               // Snap horizontally to pixel grid
-	EFreeTypeQuality quality;      // FreeType rendering quality
+	float size;                    // Font size in pixels (MANUAL - user controls this)
+	bool enableOutline;            // Enable outline rendering (MANUAL - on/off only)
+
+	// Auto-adjusted parameters (calculated internally based on size)
+	int oversampleH;               // Horizontal oversampling (auto: 3 for small, 2 for large)
+	int oversampleV;               // Vertical oversampling (auto: 3 for small, 2 for large)
+	float rasterizerMultiply;      // Brightness multiplier (auto: higher for small fonts)
+	int outlineThickness;          // Outline thickness (auto: ~5% of size if enabled)
+	bool pixelSnapH;               // Snap horizontally to pixel grid (auto: on for small fonts)
+	EFreeTypeQuality quality;      // FreeType rendering quality (auto: based on size)
 
 	SFontConfig()
 		: size(14.0f)
-		, oversampleH(4)
-		, oversampleV(4)
-		, rasterizerMultiply(1.2f)
 		, enableOutline(false)
-		, outlineThickness(1)
-		, pixelSnapH(false)
+		, oversampleH(4)           // Will be auto-adjusted in __LoadFont
+		, oversampleV(4)           // Will be auto-adjusted in __LoadFont
+		, rasterizerMultiply(1.2f) // Will be auto-adjusted in __LoadFont
+		, outlineThickness(0)      // Will be auto-calculated if enableOutline=true
+		, pixelSnapH(false)        // Will be auto-adjusted in __LoadFont
 		, quality(EFreeTypeQuality::HighQuality)
 	{}
 };

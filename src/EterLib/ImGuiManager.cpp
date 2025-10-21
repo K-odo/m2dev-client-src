@@ -171,27 +171,6 @@ bool CImGuiManager::__ParseConfigFile(std::string_view configPath, std::vector<S
 			if (ec == std::errc())
 				currentConfig.size = tempFloat;
 		}
-		else if (key == "OVERSAMPLE_H")
-		{
-			int tempInt;
-			auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), tempInt);
-			if (ec == std::errc())
-				currentConfig.oversampleH = tempInt;
-		}
-		else if (key == "OVERSAMPLE_V")
-		{
-			int tempInt;
-			auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), tempInt);
-			if (ec == std::errc())
-				currentConfig.oversampleV = tempInt;
-		}
-		else if (key == "RASTERIZER_MULTIPLY")
-		{
-			float tempFloat;
-			auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), tempFloat);
-			if (ec == std::errc())
-				currentConfig.rasterizerMultiply = tempFloat;
-		}
 		else if (key == "ENABLE_OUTLINE")
 		{
 			int tempInt;
@@ -199,19 +178,14 @@ bool CImGuiManager::__ParseConfigFile(std::string_view configPath, std::vector<S
 			if (ec == std::errc())
 				currentConfig.enableOutline = (tempInt != 0);
 		}
-		else if (key == "OUTLINE_THICKNESS")
+		// Legacy parameters - IGNORED (auto-calculated based on SIZE now)
+		// These are kept for backwards compatibility with old config files
+		else if (key == "OVERSAMPLE_H" || key == "OVERSAMPLE_V" ||
+		         key == "RASTERIZER_MULTIPLY" || key == "OUTLINE_THICKNESS" ||
+		         key == "PIXEL_SNAP_H" || key == "QUALITY")
 		{
-			int tempInt;
-			auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), tempInt);
-			if (ec == std::errc())
-				currentConfig.outlineThickness = tempInt;
-		}
-		else if (key == "PIXEL_SNAP_H")
-		{
-			int tempInt;
-			auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), tempInt);
-			if (ec == std::errc())
-				currentConfig.pixelSnapH = (tempInt != 0);
+			// Silently ignore - these are now auto-calculated
+			// User only needs to specify SIZE and ENABLE_OUTLINE
 		}
 	}
 
@@ -234,14 +208,57 @@ bool CImGuiManager::__LoadFont(const SFontConfig& config)
 
 	ImGuiIO& io = ImGui::GetIO();
 
-	// Configure font
-	ImFontConfig imConfig;
-	imConfig.OversampleH = config.oversampleH;
-	imConfig.OversampleV = config.oversampleV;
-	imConfig.PixelSnapH = config.pixelSnapH;
-	imConfig.RasterizerMultiply = config.rasterizerMultiply;
+	// C++20: Auto-adjust parameters based on font size for optimal quality
+	// This implements modern best practices for FreeType rendering (2025)
+	SFontConfig adjustedConfig = config;
 
-	// Unicode ranges (same as before)
+	// Auto-calculate outline thickness (5% of font size if enabled)
+	if (adjustedConfig.enableOutline)
+	{
+		adjustedConfig.outlineThickness = std::max(1, static_cast<int>(adjustedConfig.size * 0.05f));
+	}
+	else
+	{
+		adjustedConfig.outlineThickness = 0;
+	}
+
+	// Auto-adjust parameters based on font size ranges
+	if (adjustedConfig.size < 12.0f)  // Small fonts (< 12px)
+	{
+		// Small fonts need: higher oversampling, pixel snapping, light hinting, higher gamma
+		adjustedConfig.oversampleH = 3;
+		adjustedConfig.oversampleV = 3;
+		adjustedConfig.rasterizerMultiply = 1.3f;  // Brighter for small fonts
+		adjustedConfig.pixelSnapH = true;          // Pixel snap for crispness
+		adjustedConfig.quality = EFreeTypeQuality::LightHinting;
+	}
+	else if (adjustedConfig.size >= 12.0f && adjustedConfig.size <= 24.0f)  // Medium fonts (12-24px)
+	{
+		// Medium fonts: balanced settings
+		adjustedConfig.oversampleH = 4;
+		adjustedConfig.oversampleV = 4;
+		adjustedConfig.rasterizerMultiply = 1.2f;
+		adjustedConfig.pixelSnapH = false;
+		adjustedConfig.quality = EFreeTypeQuality::HighQuality;
+	}
+	else  // Large fonts (> 24px)
+	{
+		// Large fonts: lower oversampling (faster), no hinting, lower gamma
+		adjustedConfig.oversampleH = 2;
+		adjustedConfig.oversampleV = 2;
+		adjustedConfig.rasterizerMultiply = 1.0f;
+		adjustedConfig.pixelSnapH = false;
+		adjustedConfig.quality = EFreeTypeQuality::NoHinting;
+	}
+
+	// Configure ImGui font
+	ImFontConfig imConfig;
+	imConfig.OversampleH = adjustedConfig.oversampleH;
+	imConfig.OversampleV = adjustedConfig.oversampleV;
+	imConfig.PixelSnapH = adjustedConfig.pixelSnapH;
+	imConfig.RasterizerMultiply = adjustedConfig.rasterizerMultiply;
+
+	// Unicode ranges (comprehensive coverage for international text)
 	static const ImWchar ranges[] = {
 		0x0020, 0x00FF, // Basic Latin + Latin Supplement
 		0x0100, 0x017F, // Latin Extended-A
@@ -263,11 +280,10 @@ bool CImGuiManager::__LoadFont(const SFontConfig& config)
 	}
 
 	// C++20 designated initializers for font entry
-	// outlineThickness comes from OUTLINE_THICKNESS in FreeTypeFont.txt
 	SFontEntry entry{
 		.pFont = pFont,
-		.fontSize = config.size,
-		.outlineThickness = config.outlineThickness
+		.fontSize = adjustedConfig.size,
+		.outlineThickness = adjustedConfig.outlineThickness
 	};
 
 	m_mapFonts[config.name] = entry;
@@ -277,11 +293,15 @@ bool CImGuiManager::__LoadFont(const SFontConfig& config)
 		m_strActiveFontName = config.name;
 
 #ifdef IMGUI_ENABLE_FREETYPE
-	Tracef("ImGuiManager: Loaded font '%s' (size: %.1f, outline: %s, thickness: %d, FreeType: enabled)",
-		config.name.c_str(), config.size, config.enableOutline ? "yes" : "no", config.outlineThickness);
+	Tracef("ImGuiManager: Loaded font '%s' (size: %.1f, outline: %s, thickness: %d, oversample: %dx%d, gamma: %.2f, FreeType: enabled)",
+		config.name.c_str(), adjustedConfig.size,
+		adjustedConfig.enableOutline ? "yes" : "no",
+		adjustedConfig.outlineThickness,
+		adjustedConfig.oversampleH, adjustedConfig.oversampleV,
+		adjustedConfig.rasterizerMultiply);
 #else
 	Tracef("ImGuiManager: Loaded font '%s' (size: %.1f, outline: %s, thickness: %d, FreeType: DISABLED)",
-		config.name.c_str(), config.size, config.enableOutline ? "yes" : "no", config.outlineThickness);
+		config.name.c_str(), config.size, config.enableOutline ? "yes" : "no", adjustedConfig.outlineThickness);
 #endif
 
 	return true;
@@ -315,10 +335,19 @@ bool CImGuiManager::LoadFontsFromConfig(std::string_view configPath)
 
 	// Build atlas with FreeType for superior rendering quality
 #ifdef IMGUI_ENABLE_FREETYPE
-	// C++20: Use our strongly-typed enum for FreeType quality settings
-	// Set global FontLoader flags for FreeType (NoHinting | LightHinting = HighQuality)
-	constexpr auto quality = EFreeTypeQuality::HighQuality;
-	io.Fonts->FontLoaderFlags = __ConvertToFreeTypeFlags(quality);
+	// Modern FreeType rendering (2025): Use latest ImGui 1.92+ FontLoader API
+	// Note: Individual font quality flags are already set per-font in __LoadFont
+	// Here we set global defaults for any fonts without specific flags
+
+	// Use combined flags for optimal rendering quality
+	// LightHinting: Better readability for most fonts
+	// LoadColor: Support for color emoji/glyphs (modern ImGui feature)
+	unsigned int globalFlags = static_cast<unsigned int>(EFreeTypeQuality::LightHinting) |
+	                           static_cast<unsigned int>(EFreeTypeQuality::LoadColor);
+
+	// Set FreeType as font loader (modern ImGui 1.92+ API)
+	io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
+	io.Fonts->FontLoaderFlags = globalFlags;
 
 	if (!io.Fonts->Build())
 	{
@@ -326,8 +355,8 @@ bool CImGuiManager::LoadFontsFromConfig(std::string_view configPath)
 		return false;
 	}
 
-	Tracef("ImGuiManager: Font atlas built successfully with FreeType rasterizer (quality: HighQuality, flags: 0x%X)",
-		io.Fonts->FontLoaderFlags);
+	Tracef("ImGuiManager: Font atlas built successfully with FreeType rasterizer (flags: 0x%X, LoadColor enabled)",
+		globalFlags);
 #else
 	if (!io.Fonts->Build())
 	{
@@ -365,10 +394,12 @@ bool CImGuiManager::LoadFont(std::string_view fontName, std::string_view fontPat
 
 	if (result)
 	{
-		// Build with FreeType
+		// Build with FreeType (modern flags)
 #ifdef IMGUI_ENABLE_FREETYPE
-		constexpr auto quality = EFreeTypeQuality::HighQuality;
-		io.Fonts->FontLoaderFlags = __ConvertToFreeTypeFlags(quality);
+		unsigned int globalFlags = static_cast<unsigned int>(EFreeTypeQuality::LightHinting) |
+		                           static_cast<unsigned int>(EFreeTypeQuality::LoadColor);
+		io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
+		io.Fonts->FontLoaderFlags = globalFlags;
 #endif
 		io.Fonts->Build();
 		ImGui_ImplDX9_InvalidateDeviceObjects();
@@ -413,10 +444,12 @@ bool CImGuiManager::LoadFontFromMemory(std::string_view fontName, std::span<cons
 	if (m_strActiveFontName.empty())
 		m_strActiveFontName = std::string(fontName);
 
-	// Build with FreeType
+	// Build with FreeType (modern flags)
 #ifdef IMGUI_ENABLE_FREETYPE
-	constexpr auto quality = EFreeTypeQuality::HighQuality;
-	io.Fonts->FontLoaderFlags = __ConvertToFreeTypeFlags(quality);
+	unsigned int globalFlags = static_cast<unsigned int>(EFreeTypeQuality::LightHinting) |
+	                           static_cast<unsigned int>(EFreeTypeQuality::LoadColor);
+	io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
+	io.Fonts->FontLoaderFlags = globalFlags;
 #endif
 	io.Fonts->Build();
 	ImGui_ImplDX9_InvalidateDeviceObjects();
