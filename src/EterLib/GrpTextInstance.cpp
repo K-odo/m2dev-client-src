@@ -128,356 +128,274 @@ int ReadToken(const char* token)
 
 void CGraphicTextInstance::Update()
 {
-	if (m_isUpdate) // 문자열이 바뀌었을 때만 업데이트 한다.
+	if (m_isUpdate) // Update only when the text has changed.
 		return;
 
 	if (m_roText.IsNull())
 	{
-		Tracef("CGraphicTextInstance::Update - 폰트가 설정되지 않았습니다\n");
+		Tracef("CGraphicTextInstance::Update - Font has not been set\n");
 		return;
 	}
 
-	if (m_roText->IsEmpty())
-		return;
-
-	CGraphicFontTexture* pFontTexture = m_roText->GetFontTexturePointer();
-	if (!pFontTexture)
-		return;
-
-	UINT defCodePage = GetDefaultCodePage();
-
-	UINT dataCodePage = defCodePage; // 아랍 및 베트남 내부 데이터를 UTF8 을 사용하려 했으나 실패
-		
-	CGraphicFontTexture::TCharacterInfomation* pSpaceInfo = pFontTexture->GetCharacterInfomation(dataCodePage, ' ');
-
-	int spaceHeight = pSpaceInfo ? pSpaceInfo->height : 12;
-	
+	// Clear old data before processing.
 	m_pCharInfoVector.clear();
 	m_dwColorInfoVector.clear();
 	m_hyperlinkVector.clear();
-
 	m_textWidth = 0;
-	m_textHeight = spaceHeight;
+	m_textHeight = 0;
 
-	/* wstring begin */ 	
-
-	const char* begin = m_stText.c_str();
-	const char* end = begin + m_stText.length();
-
-	// C++20: Use std::vector instead of _alloca (safer, no stack overflow risk)
-	const int wTextMax = static_cast<int>(end - begin) * 2;
-	std::vector<wchar_t> wText(wTextMax);
-
-	DWORD dwColor = m_dwTextColor;
-
-	/* wstring end */
-	while (begin < end)
+	if (m_stText.empty())
 	{
-		const char * token = FindToken(begin, end);
+		m_isUpdate = true;
+		return;
+	}
 
-		int wTextLen = Ymir_MultiByteToWideChar(dataCodePage, 0, begin, token - begin, wText.data(), wTextMax);
+	if (g_bUseFreeTypeRendering && CImGuiManager::Instance().IsInitialized())
+	{
+		// NEW, OPTIMISED PATH FOR IMGUI/FREETYPE
+        // In this mode, we do not need to build character vectors. It is sufficient to calculate
+        // the final dimensions of the text in order to position it correctly in the Render() function.
+		// Render() will reprocess the text anyway to handle colours and tags.
 
-		if (m_isSecret)
+        // Convert text from the default code page to wide string.
+		const int codePage = GetDefaultCodePage();
+		const int wTextMax = static_cast<int>(m_stText.length()) * 2;
+		std::vector<wchar_t> wText(wTextMax);
+		const int wTextLen = Ymir_MultiByteToWideChar(codePage, 0, m_stText.c_str(), static_cast<int>(m_stText.length()), wText.data(), wTextMax);
+
+		std::wstring textToMeasure;
+		if (m_isSecret && wTextLen > 0)
 		{
-			for(int i=0; i<wTextLen; ++i)
-				__DrawCharacter(pFontTexture, dataCodePage, '*', dwColor);
-		} 
-		else 
+			// If the text is hidden (password).
+			textToMeasure = std::wstring(wTextLen, L'*');
+		}
+		else
 		{
-			if (defCodePage == CP_ARABIC) // ARABIC
+			// NOTE: This simple conversion does not remove formatting tags (e.g. |c, |h).
+			// In the new Render() function, the text is drawn in its entirety, so the tags will be visible.
+            // For precise width measurement, they should be removed here, but for consistency
+            // with the logic of Render(), we leave them in place.
+			textToMeasure = std::wstring(wText.data(), wTextLen);
+		}
+
+		// Use ImGuiManager to retrieve precise text dimensions (taking into account hinting, AA, etc.)
+		int width = 0, height = 0;
+		CImGuiManager::Instance().GetTextExtentW(textToMeasure, &width, &height);
+		m_textWidth = width;
+		m_textHeight = height;
+	}
+	else
+	{
+		// FALLBACK: ORIGINAL CHARACTER-BY-CHARACTER PROCESSING LOGIC
+        // This path is used when g_bUseFreeTypeRendering is false.
+        // It constructs the m_pCharInfoVector and m_dwColorInfoVector vectors for the old rendering system.
+
+		if (m_roText->IsEmpty())
+			return;
+
+		CGraphicFontTexture* pFontTexture = m_roText->GetFontTexturePointer();
+		if (!pFontTexture)
+			return;
+
+		UINT defCodePage = GetDefaultCodePage();
+		UINT dataCodePage = defCodePage;
+
+		CGraphicFontTexture::TCharacterInfomation* pSpaceInfo = pFontTexture->GetCharacterInfomation(dataCodePage, ' ');
+		int spaceHeight = pSpaceInfo ? pSpaceInfo->height : 12;
+		m_textHeight = spaceHeight;
+
+		const char* begin = m_stText.c_str();
+		const char* end = begin + m_stText.length();
+		const int wTextMax = static_cast<int>(end - begin) * 2;
+		std::vector<wchar_t> wText(wTextMax);
+		DWORD dwColor = m_dwTextColor;
+
+		while (begin < end)
+		{
+			const char * token = FindToken(begin, end);
+			int wTextLen = Ymir_MultiByteToWideChar(dataCodePage, 0, begin, token - begin, wText.data(), wTextMax);
+
+			if (m_isSecret)
 			{
-				// C++20: Use std::vector instead of _alloca
-				std::vector<wchar_t> wArabicText(wTextLen);
-				int wArabicTextLen = Arabic_MakeShape(wText.data(), wTextLen, wArabicText.data(), wTextLen);
-
-				bool isEnglish = true;
-				int nEnglishBase = wArabicTextLen - 1;
-
-				//<<하이퍼 링크>>
-				int x = 0;
-
-				int len;				
-				int hyperlinkStep = 0;
-				SHyperlink kHyperlink;
-				std::wstring hyperlinkBuffer;
-				int no_hyperlink = 0;
-
-				// 심볼로 끝나면 아랍어 모드로 시작해야한다
-				if (Arabic_IsInSymbol(wArabicText[wArabicTextLen - 1]))
+				for(int i=0; i<wTextLen; ++i)
+					__DrawCharacter(pFontTexture, dataCodePage, '*', dwColor);
+			}
+			else
+			{
+				// This is where all the original, complex text parsing logic is located,
+                // including support for Arabic and formatting tags.
+				// (The following code has been 1:1 from the original file).
+				if (defCodePage == CP_ARABIC) // ARABIC
 				{
-					isEnglish = false;
-				}
-				
-				int i = 0;
-				for (i = wArabicTextLen - 1 ; i >= 0; --i)
-				{
-					wchar_t wArabicChar = wArabicText[i];
-
-					if (isEnglish)
+					std::vector<wchar_t> wArabicText(wTextLen);
+					int wArabicTextLen = Arabic_MakeShape(wText.data(), wTextLen, wArabicText.data(), wTextLen);
+					bool isEnglish = true;
+					int nEnglishBase = wArabicTextLen - 1;
+					int len;
+					int hyperlinkStep = 0;
+					SHyperlink kHyperlink;
+					std::wstring hyperlinkBuffer;
+					int no_hyperlink = 0;
+					if (Arabic_IsInSymbol(wArabicText[wArabicTextLen - 1]))
 					{
-
-						// <<심볼의 경우 (ex. 기호, 공백)>> -> 영어 모드 유지.
-						//		<<(심볼이 아닌 것들 : 숫자, 영어, 아랍어)>>
-						//  (1) 맨 앞의 심볼 or
-						//	(2) 
-						//		1) 앞 글자가 아랍어 아님 &&
-						//		2) 뒷 글자가 아랍어 아님 &&
-						//		3) 뒷 글자가 심볼'|'이 아님 &&
-						//		or
-						//	(3) 현재 심볼이 '|'
-						// <<아랍어 모드로 넘어가는 경우 : 심볼에서.>>
-						//	1) 앞글자 아랍어
-						//	2) 뒷글자 아랍어
-						//
-						//
-						if (Arabic_IsInSymbol(wArabicChar) && (
-								(i == 0) ||
-								(i > 0 &&
-									!(Arabic_HasPresentation(wArabicText.data(), i - 1) || Arabic_IsInPresentation(wArabicText[i + 1]))  && //앞글자, 뒷글자가 아랍어 아님.
-									wArabicText[i+1] != '|'
-								) ||
-								wArabicText[i] == '|'
-							))//if end.
+						isEnglish = false;
+					}
+					int i = 0;
+					for (i = wArabicTextLen - 1 ; i >= 0; --i)
+					{
+						wchar_t wArabicChar = wArabicText[i];
+						if (isEnglish)
 						{
-							// pass
-							int temptest = 1;
-						}
-						// (1)아랍어이거나 (2)아랍어 다음의 심볼이라면 아랍어 모드 전환
-						else if (Arabic_IsInPresentation(wArabicChar) || Arabic_IsInSymbol(wArabicChar))
-						{
-							//그 전까지의 영어를 그린다.
-							for (int e = i + 1; e <= nEnglishBase;) {
-								int ret = GetTextTag(&wArabicText[e], wArabicTextLen - e, len, hyperlinkBuffer);
-
-								if (ret == TEXT_TAG_PLAIN || ret == TEXT_TAG_TAG)
-								{
-									if (hyperlinkStep == 1)
-										hyperlinkBuffer.append(1, wArabicText[e]);
-									else
-									{
-										int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wArabicText[e], dwColor);
-										kHyperlink.ex += charWidth;
-										//x += charWidth;
-										
-										//기존 추가한 하이퍼링크의 좌표 수정.
-										for (int j = 1; j <= no_hyperlink; j++)
-										{
-											if(m_hyperlinkVector.size() < j)
-												break;
-
-											SHyperlink & tempLink = m_hyperlinkVector[m_hyperlinkVector.size() - j];
-											tempLink.ex += charWidth;
-											tempLink.sx += charWidth;
-										}
-									}
-								}
-								else
-								{
-									if (ret == TEXT_TAG_COLOR)
-										dwColor = htoi(hyperlinkBuffer.c_str(), 8);
-									else if (ret == TEXT_TAG_RESTORE_COLOR)
-										dwColor = m_dwTextColor;
-									else if (ret == TEXT_TAG_HYPERLINK_START)
-									{
-										hyperlinkStep = 1;
-										hyperlinkBuffer = L"";
-									}
-									else if (ret == TEXT_TAG_HYPERLINK_END)
+							if (Arabic_IsInSymbol(wArabicChar) && ((i == 0) || (i > 0 && !(Arabic_HasPresentation(wArabicText.data(), i - 1) || Arabic_IsInPresentation(wArabicText[i + 1])) && wArabicText[i+1] != '|') || wArabicText[i] == '|'))
+							{
+								int temptest = 1;
+							}
+							else if (Arabic_IsInPresentation(wArabicChar) || Arabic_IsInSymbol(wArabicChar))
+							{
+								for (int e = i + 1; e <= nEnglishBase;) {
+									int ret = GetTextTag(&wArabicText[e], wArabicTextLen - e, len, hyperlinkBuffer);
+									if (ret == TEXT_TAG_PLAIN || ret == TEXT_TAG_TAG)
 									{
 										if (hyperlinkStep == 1)
-										{
-											++hyperlinkStep;
-											kHyperlink.ex = kHyperlink.sx = 0; // 실제 텍스트가 시작되는 위치
-										}
+											hyperlinkBuffer.append(1, wArabicText[e]);
 										else
 										{
-											kHyperlink.text = hyperlinkBuffer;
-											m_hyperlinkVector.push_back(kHyperlink);
-											no_hyperlink++;
-
-
-											hyperlinkStep = 0;
-											hyperlinkBuffer = L"";						
+											int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wArabicText[e], dwColor);
+											kHyperlink.ex += charWidth;
+											for (int j = 1; j <= no_hyperlink; j++)
+											{
+												if(m_hyperlinkVector.size() < j) break;
+												SHyperlink & tempLink = m_hyperlinkVector[m_hyperlinkVector.size() - j];
+												tempLink.ex += charWidth;
+												tempLink.sx += charWidth;
+											}
 										}
 									}
+									else
+									{
+										if (ret == TEXT_TAG_COLOR) dwColor = htoi(hyperlinkBuffer.c_str(), 8);
+										else if (ret == TEXT_TAG_RESTORE_COLOR) dwColor = m_dwTextColor;
+										else if (ret == TEXT_TAG_HYPERLINK_START) { hyperlinkStep = 1; hyperlinkBuffer = L""; }
+										else if (ret == TEXT_TAG_HYPERLINK_END)
+										{
+											if (hyperlinkStep == 1) { ++hyperlinkStep; kHyperlink.ex = kHyperlink.sx = 0; }
+											else { kHyperlink.text = hyperlinkBuffer; m_hyperlinkVector.push_back(kHyperlink); no_hyperlink++; hyperlinkStep = 0; hyperlinkBuffer = L""; }
+										}
+									}
+									e += len;
 								}
-								e += len;
-							}
-
-							int charWidth = __DrawCharacter(pFontTexture, dataCodePage, Arabic_ConvSymbol(wArabicText[i]), dwColor);
-							kHyperlink.ex += charWidth;
-							
-							//기존 추가한 하이퍼링크의 좌표 수정.
-							for (int j = 1; j <= no_hyperlink; j++)
-							{
-								if(m_hyperlinkVector.size() < j)
-									break;
-
-								SHyperlink & tempLink = m_hyperlinkVector[m_hyperlinkVector.size() - j];
-								tempLink.ex += charWidth;
-								tempLink.sx += charWidth;
-							}
-
-							isEnglish = false;
-						}
-					}
-					else //[[[아랍어 모드]]]
-					{
-						// 아랍어이거나 아랍어 출력중 나오는 심볼이라면
-						if (Arabic_IsInPresentation(wArabicChar) || Arabic_IsInSymbol(wArabicChar))
-						{
-							int charWidth = __DrawCharacter(pFontTexture, dataCodePage, Arabic_ConvSymbol(wArabicText[i]), dwColor);
-							kHyperlink.ex += charWidth;
-							x += charWidth;
-							
-							//기존 추가한 하이퍼링크의 좌표 수정.
-							for (int j = 1; j <= no_hyperlink; j++)
-							{
-								if(m_hyperlinkVector.size() < j)
-									break;
-
-								SHyperlink & tempLink = m_hyperlinkVector[m_hyperlinkVector.size() - j];
-								tempLink.ex += charWidth;
-								tempLink.sx += charWidth;
-							}
-						}
-						else //영어이거나, 영어 다음에 나오는 심볼이라면,
-						{
-							nEnglishBase = i;
-							isEnglish = true;
-						}
-					}
-				}
-
-				if (isEnglish)
-				{
-					for (int e = i + 1; e <= nEnglishBase;) {
-						int ret = GetTextTag(&wArabicText[e], wArabicTextLen - e, len, hyperlinkBuffer);
-
-						if (ret == TEXT_TAG_PLAIN || ret == TEXT_TAG_TAG)
-						{
-							if (hyperlinkStep == 1)
-								hyperlinkBuffer.append(1, wArabicText[e]);
-							else
-							{
-								int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wArabicText[e], dwColor);
+								int charWidth = __DrawCharacter(pFontTexture, dataCodePage, Arabic_ConvSymbol(wArabicText[i]), dwColor);
 								kHyperlink.ex += charWidth;
-
-								//기존 추가한 하이퍼링크의 좌표 수정.
 								for (int j = 1; j <= no_hyperlink; j++)
 								{
-									if(m_hyperlinkVector.size() < j)
-										break;
-
+									if(m_hyperlinkVector.size() < j) break;
+									SHyperlink & tempLink = m_hyperlinkVector[m_hyperlinkVector.size() - j];
+									tempLink.ex += charWidth;
+									tempLink.sx += charWidth;
+								}
+								isEnglish = false;
+							}
+						}
+						else
+						{
+							if (Arabic_IsInPresentation(wArabicChar) || Arabic_IsInSymbol(wArabicChar))
+							{
+								int charWidth = __DrawCharacter(pFontTexture, dataCodePage, Arabic_ConvSymbol(wArabicText[i]), dwColor);
+								kHyperlink.ex += charWidth;
+								for (int j = 1; j <= no_hyperlink; j++)
+								{
+									if(m_hyperlinkVector.size() < j) break;
 									SHyperlink & tempLink = m_hyperlinkVector[m_hyperlinkVector.size() - j];
 									tempLink.ex += charWidth;
 									tempLink.sx += charWidth;
 								}
 							}
+							else { nEnglishBase = i; isEnglish = true; }
 						}
-						else
-						{
-							if (ret == TEXT_TAG_COLOR)
-								dwColor = htoi(hyperlinkBuffer.c_str(), 8);
-							else if (ret == TEXT_TAG_RESTORE_COLOR)
-								dwColor = m_dwTextColor;
-							else if (ret == TEXT_TAG_HYPERLINK_START)
+					}
+					if (isEnglish)
+					{
+						for (int e = i + 1; e <= nEnglishBase;) {
+							int ret = GetTextTag(&wArabicText[e], wArabicTextLen - e, len, hyperlinkBuffer);
+							if (ret == TEXT_TAG_PLAIN || ret == TEXT_TAG_TAG)
 							{
-								hyperlinkStep = 1;
-								hyperlinkBuffer = L"";
-							}
-							else if (ret == TEXT_TAG_HYPERLINK_END)
-							{
-								if (hyperlinkStep == 1)
-								{
-									++hyperlinkStep;
-									kHyperlink.ex = kHyperlink.sx = 0; // 실제 텍스트가 시작되는 위치
-								}
+								if (hyperlinkStep == 1) hyperlinkBuffer.append(1, wArabicText[e]);
 								else
 								{
-									kHyperlink.text = hyperlinkBuffer;
-									m_hyperlinkVector.push_back(kHyperlink);
-									no_hyperlink++;
-
-									hyperlinkStep = 0;
-									hyperlinkBuffer = L"";						
+									int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wArabicText[e], dwColor);
+									kHyperlink.ex += charWidth;
+									for (int j = 1; j <= no_hyperlink; j++)
+									{
+										if(m_hyperlinkVector.size() < j) break;
+										SHyperlink & tempLink = m_hyperlinkVector[m_hyperlinkVector.size() - j];
+										tempLink.ex += charWidth;
+										tempLink.sx += charWidth;
+									}
 								}
-							}
-						}
-						e += len;
-					}
-
-				}
-			}
-			else	// 아랍외 다른 지역.
-			{
-				int x = 0;
-				int len;				
-				int hyperlinkStep = 0;
-				SHyperlink kHyperlink;
-				std::wstring hyperlinkBuffer;
-
-				for (int i = 0; i < wTextLen; )
-				{
-					int ret = GetTextTag(&wText.data()[i], wTextLen - i, len, hyperlinkBuffer);
-
-					if (ret == TEXT_TAG_PLAIN || ret == TEXT_TAG_TAG)
-					{
-						if (hyperlinkStep == 1)
-							hyperlinkBuffer.append(1, wText.data()[i]);
-						else
-						{
-							int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wText.data()[i], dwColor);
-							kHyperlink.ex += charWidth;
-							x += charWidth;
-						}
-					}
-					else
-					{
-						if (ret == TEXT_TAG_COLOR)
-							dwColor = htoi(hyperlinkBuffer.c_str(), 8);
-						else if (ret == TEXT_TAG_RESTORE_COLOR)
-							dwColor = m_dwTextColor;
-						else if (ret == TEXT_TAG_HYPERLINK_START)
-						{
-							hyperlinkStep = 1;
-							hyperlinkBuffer = L"";
-						}
-						else if (ret == TEXT_TAG_HYPERLINK_END)
-						{
-							if (hyperlinkStep == 1)
-							{
-								++hyperlinkStep;
-								kHyperlink.ex = kHyperlink.sx = x; // 실제 텍스트가 시작되는 위치
 							}
 							else
 							{
-								kHyperlink.text = hyperlinkBuffer;
-								m_hyperlinkVector.push_back(kHyperlink);
-
-								hyperlinkStep = 0;
-								hyperlinkBuffer = L"";						
+								if (ret == TEXT_TAG_COLOR) dwColor = htoi(hyperlinkBuffer.c_str(), 8);
+								else if (ret == TEXT_TAG_RESTORE_COLOR) dwColor = m_dwTextColor;
+								else if (ret == TEXT_TAG_HYPERLINK_START) { hyperlinkStep = 1; hyperlinkBuffer = L""; }
+								else if (ret == TEXT_TAG_HYPERLINK_END)
+								{
+									if (hyperlinkStep == 1) { ++hyperlinkStep; kHyperlink.ex = kHyperlink.sx = 0; }
+									else { kHyperlink.text = hyperlinkBuffer; m_hyperlinkVector.push_back(kHyperlink); no_hyperlink++; hyperlinkStep = 0; hyperlinkBuffer = L""; }
+								}
 							}
+							e += len;
 						}
 					}
-					i += len;
+				}
+				else
+				{
+					int x = 0;
+					int len;
+					int hyperlinkStep = 0;
+					SHyperlink kHyperlink;
+					std::wstring hyperlinkBuffer;
+					for (int i = 0; i < wTextLen; )
+					{
+						int ret = GetTextTag(&wText.data()[i], wTextLen - i, len, hyperlinkBuffer);
+						if (ret == TEXT_TAG_PLAIN || ret == TEXT_TAG_TAG)
+						{
+							if (hyperlinkStep == 1) hyperlinkBuffer.append(1, wText.data()[i]);
+							else
+							{
+								int charWidth = __DrawCharacter(pFontTexture, dataCodePage, wText.data()[i], dwColor);
+								kHyperlink.ex += charWidth;
+								x += charWidth;
+							}
+						}
+						else
+						{
+							if (ret == TEXT_TAG_COLOR) dwColor = htoi(hyperlinkBuffer.c_str(), 8);
+							else if (ret == TEXT_TAG_RESTORE_COLOR) dwColor = m_dwTextColor;
+							else if (ret == TEXT_TAG_HYPERLINK_START) { hyperlinkStep = 1; hyperlinkBuffer = L""; }
+							else if (ret == TEXT_TAG_HYPERLINK_END)
+							{
+								if (hyperlinkStep == 1) { ++hyperlinkStep; kHyperlink.ex = kHyperlink.sx = x; }
+								else { kHyperlink.text = hyperlinkBuffer; m_hyperlinkVector.push_back(kHyperlink); hyperlinkStep = 0; hyperlinkBuffer = L""; }
+							}
+						}
+						i += len;
+					}
 				}
 			}
+			if (token < end)
+			{
+				int newCodePage = ReadToken(token);
+				dataCodePage = newCodePage;
+				begin = token + 5;
+			}
+			else
+			{
+				begin = token;
+			}
 		}
-
-		if (token < end)
-		{			
-			int newCodePage = ReadToken(token);			
-			dataCodePage = newCodePage;	// 아랍 및 베트남 내부 데이터를 UTF8 을 사용하려 했으나 실패
-			begin = token + 5;			
-		}
-		else
-		{
-			begin = token;
-		}
+		pFontTexture->UpdateTexture();
 	}
-
-	pFontTexture->UpdateTexture();
 
 	m_isUpdate = true;
 }
@@ -487,23 +405,24 @@ void CGraphicTextInstance::Render(RECT * pClipRect)
 	if (!m_isUpdate)
 		return;
 
-	// Use ImGui/FreeType rendering (ImGui backend supports z-buffer!)
 	if (g_bUseFreeTypeRendering && CImGuiManager::Instance().IsInitialized())
 	{
+		// NEW RENDERING PATH BY IMGUI/FREETYPE
+        // This path uses CImGuiManager to render text in high quality.
+        // It supports alignment, text hiding (passwords) and cursor drawing.
+		// Outline is rendered automatically if enabled in the font configuration.
 		if (m_stText.empty() && !m_isCursor)
 			return;
 
-		// C++20: Convert text to wide string first
 		const int codePage = GetDefaultCodePage();
 		const int wTextMax = static_cast<int>(m_stText.length()) * 2;
 		std::vector<wchar_t> wText(wTextMax);
 		const int wTextLen = Ymir_MultiByteToWideChar(codePage, 0, m_stText.c_str(), static_cast<int>(m_stText.length()), wText.data(), wTextMax);
 
-		// Handle password masking (create masked wide string, then convert to UTF-8)
 		std::wstring wRenderText;
 		if (m_isSecret && wTextLen > 0)
 		{
-			wRenderText = std::wstring(wTextLen, L'*');  // C++20: Proper wide string masking
+			wRenderText = std::wstring(wTextLen, L'*');
 		}
 		else
 		{
@@ -513,53 +432,32 @@ void CGraphicTextInstance::Render(RECT * pClipRect)
 		float fStanX = m_v3Position.x;
 		float fStanY = m_v3Position.y;
 
-		// Calculate text size for alignment (use wide string API)
-		int textWidth = 0;
-		int textHeight = 0;
-		CImGuiManager::Instance().GetTextExtentW(wRenderText, &textWidth, &textHeight);
-
-		// Apply horizontal alignment
+		// Use the dimensions calculated in Update() to align the text.
 		if (m_hAlign == HORIZONTAL_ALIGN_CENTER)
-			fStanX -= textWidth / 2.0f;
+			fStanX -= m_textWidth / 2.0f;
 		else if (m_hAlign == HORIZONTAL_ALIGN_RIGHT)
-			fStanX -= textWidth;
+			fStanX -= m_textWidth;
 
-		// Apply vertical alignment
 		if (m_vAlign == VERTICAL_ALIGN_CENTER)
-			fStanY -= textHeight / 2.0f;
+			fStanY -= m_textHeight / 2.0f;
 		else if (m_vAlign == VERTICAL_ALIGN_BOTTOM)
-			fStanY -= textHeight;
+			fStanY -= m_textHeight;
 
-		// C++20: Render text using wide string API (no UTF-8 conversion needed)
-		// Note: ImGui DrawList WILL respect z-buffer if we pass proper depth
+		// Call the appropriate rendering function from ImGuiManager.
 		if (m_isOutline)
 		{
-			CImGuiManager::Instance().RenderTextWithOutlineW(
-				wRenderText,
-				fStanX, fStanY,
-				m_dwTextColor,
-				m_dwOutLineColor,
-				CImGuiManager::ERenderLayer::Background
-			);
+			CImGuiManager::Instance().RenderTextWithOutlineW(wRenderText, fStanX, fStanY, m_dwTextColor, m_dwOutLineColor, CImGuiManager::ERenderLayer::Background);
 		}
 		else
 		{
-			CImGuiManager::Instance().RenderTextW(
-				wRenderText,
-				fStanX, fStanY,
-				m_dwTextColor,
-				false,
-				CImGuiManager::ERenderLayer::Background
-			);
+			CImGuiManager::Instance().RenderTextW(wRenderText, fStanX, fStanY, m_dwTextColor, false, CImGuiManager::ERenderLayer::Background);
 		}
 
-		// Draw cursor if enabled
+		// Drawing the cursor, if enabled.
 		if (m_isCursor)
 		{
 			const int curpos = CIME::GetCurPos();
 			const int compend = curpos + CIME::GetCompLen();
-
-			// C++20: Calculate width up to cursor position using wide string
 			int widthToCursor = 0;
 			if (!wRenderText.empty() && curpos > 0)
 			{
@@ -574,17 +472,11 @@ void CGraphicTextInstance::Render(RECT * pClipRect)
 			float cursorX = fStanX + widthToCursor;
 			float cursorY = fStanY;
 			float cursorWidth = 2.0f;
-			float cursorHeight = (textHeight > 0) ? static_cast<float>(textHeight) : 14.0f;
-
+			float cursorHeight = (m_textHeight > 0) ? static_cast<float>(m_textHeight) : 14.0f;
 			ImU32 cursorColor = (curpos < compend) ? IM_COL32(255, 255, 255, 128) : IM_COL32(255, 255, 255, 255);
 			ImDrawList* drawList = ImGui::GetForegroundDrawList();
-			drawList->AddRectFilled(
-				ImVec2(cursorX, cursorY),
-				ImVec2(cursorX + cursorWidth, cursorY + cursorHeight),
-				cursorColor
-			);
+			drawList->AddRectFilled(ImVec2(cursorX, cursorY), ImVec2(cursorX + cursorWidth, cursorY + cursorHeight), cursorColor);
 
-			// Draw IME underline
 			if (curpos < compend)
 			{
 				int ulbegin = CIME::GetULBegin();
@@ -592,20 +484,15 @@ void CGraphicTextInstance::Render(RECT * pClipRect)
 				if (ulbegin < ulend)
 				{
 					float underlineY = cursorY + cursorHeight;
-					drawList->AddLine(
-						ImVec2(cursorX, underlineY),
-						ImVec2(cursorX + cursorWidth, underlineY + 2.0f),
-						IM_COL32(255, 0, 0, 255),
-						2.0f
-					);
+					drawList->AddLine(ImVec2(cursorX, underlineY), ImVec2(cursorX + cursorWidth, underlineY + 2.0f), IM_COL32(255, 0, 0, 255), 2.0f);
 				}
 			}
 		}
-
-		return;
+		return; // Exit the function to avoid executing the fallback code.
 	}
 
-	// Fallback to old GDI rendering
+	// Fallback to old rendering (GDI/Direct3D)
+	// This code is only executed if g_bUseFreeTypeRendering is false.
 	CGraphicText* pkText=m_roText.GetPointer();
 	if (!pkText)
 		return;
