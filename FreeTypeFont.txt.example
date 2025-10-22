@@ -1,141 +1,52 @@
 # ===================================================================
 # METIN2 CLIENT - FREETYPE FONT CONFIGURATION
 # ===================================================================
-# This file configures all fonts used in the game UI.
-# Save this as "FreeTypeFont.txt" in the game root directory.
+# FreeType Font Configuration (Auto-Adjusted Version)
+# ===================================================================
+# Modern ImGui + FreeType integration with automatic parameter optimization
 #
-# Documentation: See FREETYPE_FONT_CONFIG.md for full parameter reference
-# ===================================================================
-
-# ===================================================================
-# DEFAULT UI FONT (UI_DEF_FONT)
-# Used for: General UI text, descriptions, menus, buttons
-# ===================================================================
-FONT                 UI_DEF_FONT
-PATH                 font\Arial.ttf
-SIZE                 12.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.3
-ENABLE_OUTLINE       1
-OUTLINE_THICKNESS    1
-PIXEL_SNAP_H         1
-
-# ===================================================================
-# LARGE UI FONT (UI_DEF_FONT_LARGE)
-# Used for: Window titles, headers, important messages
-# ===================================================================
-FONT                 UI_DEF_FONT_LARGE
-PATH                 font\Arial.ttf
-SIZE                 14.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.2
-ENABLE_OUTLINE       1
-OUTLINE_THICKNESS    2
-PIXEL_SNAP_H         0
-
-# ===================================================================
-# SMALL UI FONT (UI_DEF_FONT_SMALL)
-# Used for: Small labels, timestamps, secondary info
-# ===================================================================
-FONT                 UI_DEF_FONT_SMALL
-PATH                 font\Arial.ttf
-SIZE                 9.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.4
-ENABLE_OUTLINE       1
-OUTLINE_THICKNESS    1
-PIXEL_SNAP_H         1
-
-
-# ===================================================================
-# CAN BE IMPROVED / DVELOPED BY
-# ===================================================================
-
-
-# ===================================================================
-# CHAT FONT (CHAT_FONT)
-# Used for: Chat window messages, player chat
-# ===================================================================
-FONT                 CHAT_FONT
-PATH                 font\Tahoma.ttf
-SIZE                 12.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.4
-ENABLE_OUTLINE       1
-OUTLINE_THICKNESS    1
-PIXEL_SNAP_H         1
-
-# ===================================================================
-# DAMAGE NUMBERS (DMG_FONT)
-# Used for: Floating combat damage numbers
-# ===================================================================
-FONT                 DMG_FONT
-PATH                 font\Arial.ttf
-SIZE                 16.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.5
-ENABLE_OUTLINE       1
-OUTLINE_THICKNESS    2
-PIXEL_SNAP_H         0
-
-# ===================================================================
-# PLAYER NAME FONT (NAME_FONT)
-# Used for: Player names above characters
-# ===================================================================
-FONT                 NAME_FONT
-PATH                 font\Arial.ttf
-SIZE                 13.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.3
-ENABLE_OUTLINE       1
-OUTLINE_THICKNESS    1
-PIXEL_SNAP_H         1
-
-# ===================================================================
-# TOOLTIP FONT (TOOLTIP_FONT)
-# Used for: Item tooltips, hover descriptions
-# ===================================================================
-FONT                 TOOLTIP_FONT
-PATH                 font\Arial.ttf
-SIZE                 13.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.2
-ENABLE_OUTLINE       0
-OUTLINE_THICKNESS    0
-PIXEL_SNAP_H         1
-
-# ===================================================================
-# QUEST FONT (QUEST_FONT)
-# Used for: Quest dialogs and text
-# ===================================================================
-FONT                 QUEST_FONT
-PATH                 font\Tahoma.ttf
-SIZE                 14.0
-OVERSAMPLE_H         4
-OVERSAMPLE_V         4
-RASTERIZER_MULTIPLY  1.2
-ENABLE_OUTLINE       0
-OUTLINE_THICKNESS    0
-PIXEL_SNAP_H         1
-
-# ===================================================================
-# NOTES:
-# ===================================================================
-# - Comments start with # or //
-# - Font paths are relative to game executable
-# - SIZE is in pixels (float)
-# - OVERSAMPLE_H/V: Higher = smoother (but slower). 4 is optimal.
-# - RASTERIZER_MULTIPLY: 1.0-1.5 recommended. Higher = brighter/bolder.
-# - ENABLE_OUTLINE: 0 = off, 1 = on
-# - OUTLINE_THICKNESS: 1-3 pixels recommended. Creates centered outline.
-# - PIXEL_SNAP_H: 1 = crisper small text, 0 = smoother large text
+# USER CONTROLS:
+#   - SIZE: Font size in pixels MANUAL 
+#   - ENABLE_OUTLINE: 0 = off, 1 = on (MANUAL - simple on/off)
 #
-# Restart game after editing this file!
+# AUTO-CALCULATED (you don't need to specify these):
+#   - OVERSAMPLE_H/V: Auto-adjusted based on font size
+#   - RASTERIZER_MULTIPLY: Auto-adjusted for optimal brightness
+#   - OUTLINE_THICKNESS: Auto-calculated as ~5% of font size if enabled
+#   - PIXEL_SNAP_H: Auto-enabled for small fonts (<12px)
+#   - QUALITY: Auto-selected (LightHinting for small, HighQuality for medium, NoHinting for large)
+#
+# SIZE RANGES AND AUTO-ADJUSTMENTS:
+#   Small fonts (<12px):   oversample=3x3, gamma=1.3, pixelSnap=ON,  quality=LightHinting
+#   Medium fonts (12-24px): oversample=4x4, gamma=1.2, pixelSnap=OFF, quality=HighQuality
+#   Large fonts (>24px):    oversample=2x2, gamma=1.0, pixelSnap=OFF, quality=NoHinting
 # ===================================================================
+#
+#
+# Example 1: Default UI font (14px) - balanced quality
+FONT UI_DEF_FONT
+PATH fonts/Tahoma.ttf
+SIZE 14
+ENABLE_OUTLINE 1
+# Auto-calculated: oversample=4x4, gamma=1.2, outline thickness=1px, pixelSnap=OFF
+
+# Example 2: Small UI font (11px) - optimized for readability
+FONT UI_DEF_FONT_SMALL
+PATH fonts/Tahoma.ttf
+SIZE 11
+ENABLE_OUTLINE 1
+# Auto-calculated: oversample=3x3, gamma=1.3, outline thickness=1px, pixelSnap=ON
+
+# Example 3: Large UI font (20px) - smooth and crisp
+FONT UI_DEF_FONT_LARGE
+PATH fonts/Tahoma.ttf
+SIZE 20
+ENABLE_OUTLINE 1
+# Auto-calculated: oversample=4x4, gamma=1.2, outline thickness=1px, pixelSnap=OFF
+
+# Example 4: Extra large title font (32px) - optimized for performance
+FONT UI_DEF_FONT_TITLE
+PATH fonts/Tahoma.ttf
+SIZE 32
+ENABLE_OUTLINE 0
+# Auto-calculated: oversample=2x2, gamma=1.0, outline thickness=0px, pixelSnap=OFF

@@ -450,7 +450,7 @@ void CGraphicTextInstance::Render(RECT * pClipRect)
 		}
 		else
 		{
-			CImGuiManager::Instance().RenderTextW(wRenderText, fStanX, fStanY, m_dwTextColor, false, CImGuiManager::ERenderLayer::Background);
+			CImGuiManager::Instance().RenderTextW(wRenderText, fStanX, fStanY, m_dwTextColor, CImGuiManager::ERenderLayer::Background);
 		}
 
 		// Drawing the cursor, if enabled.
