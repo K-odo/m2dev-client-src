@@ -150,39 +150,40 @@ void CGraphicTextInstance::Update()
 		return;
 	}
 
-	if (g_bUseFreeTypeRendering && CImGuiManager::Instance().IsInitialized())
+	if (g_bUseFreeTypeRendering && CImGuiManager::Instance().IsInitialized()) [[likely]]
 	{
 		// NEW, OPTIMISED PATH FOR IMGUI/FREETYPE
-        // In this mode, we do not need to build character vectors. It is sufficient to calculate
-        // the final dimensions of the text in order to position it correctly in the Render() function.
+		// In this mode, we do not need to build character vectors. It is sufficient to calculate
+		// the final dimensions of the text in order to position it correctly in the Render() function.
 		// Render() will reprocess the text anyway to handle colours and tags.
 
-        // Convert text from the default code page to wide string.
+		// Convert text from the default code page to wide string
 		const int codePage = GetDefaultCodePage();
 		const int wTextMax = static_cast<int>(m_stText.length()) * 2;
 		std::vector<wchar_t> wText(wTextMax);
-		const int wTextLen = Ymir_MultiByteToWideChar(codePage, 0, m_stText.c_str(), static_cast<int>(m_stText.length()), wText.data(), wTextMax);
+		const int wTextLen = Ymir_MultiByteToWideChar(codePage, 0, m_stText.c_str(),
+			static_cast<int>(m_stText.length()), wText.data(), wTextMax);
 
 		std::wstring textToMeasure;
-		if (m_isSecret && wTextLen > 0)
+		if (m_isSecret && wTextLen > 0) [[unlikely]]
 		{
-			// If the text is hidden (password).
-			textToMeasure = std::wstring(wTextLen, L'*');
+			// If the text is hidden (password)
+			textToMeasure.assign(wTextLen, L'*');
 		}
 		else
 		{
 			// NOTE: This simple conversion does not remove formatting tags (e.g. |c, |h).
 			// In the new Render() function, the text is drawn in its entirety, so the tags will be visible.
-            // For precise width measurement, they should be removed here, but for consistency
-            // with the logic of Render(), we leave them in place.
-			textToMeasure = std::wstring(wText.data(), wTextLen);
+			// For precise width measurement, they should be removed here, but for consistency
+			// with the logic of Render(), we leave them in place.
+			textToMeasure.assign(wText.data(), wTextLen);
 		}
 
-		// Use ImGuiManager to retrieve precise text dimensions (taking into account hinting, AA, etc.)
+		// Use ImGuiManager to retrieve precise text dimensions
 		int width = 0, height = 0;
 		CImGuiManager::Instance().GetTextExtentW(textToMeasure, &width, &height);
-		m_textWidth = width;
-		m_textHeight = height;
+		m_textWidth = static_cast<WORD>(width);
+		m_textHeight = static_cast<WORD>(height);
 	}
 	else
 	{
@@ -400,39 +401,40 @@ void CGraphicTextInstance::Update()
 	m_isUpdate = true;
 }
 
-void CGraphicTextInstance::Render(RECT * pClipRect)
+void CGraphicTextInstance::Render(RECT * pClipRect, CImGuiManager::ERenderLayer layer)
 {
 	if (!m_isUpdate)
 		return;
 
-	if (g_bUseFreeTypeRendering && CImGuiManager::Instance().IsInitialized())
+	if (g_bUseFreeTypeRendering && CImGuiManager::Instance().IsInitialized()) [[likely]]
 	{
 		// NEW RENDERING PATH BY IMGUI/FREETYPE
-        // This path uses CImGuiManager to render text in high quality.
-        // It supports alignment, text hiding (passwords) and cursor drawing.
+		// This path uses CImGuiManager to render text in high quality.
+		// It supports alignment, text hiding (passwords) and cursor drawing.
 		// Outline is rendered automatically if enabled in the font configuration.
-		if (m_stText.empty() && !m_isCursor)
+		if (m_stText.empty() && !m_isCursor) [[unlikely]]
 			return;
 
 		const int codePage = GetDefaultCodePage();
 		const int wTextMax = static_cast<int>(m_stText.length()) * 2;
 		std::vector<wchar_t> wText(wTextMax);
-		const int wTextLen = Ymir_MultiByteToWideChar(codePage, 0, m_stText.c_str(), static_cast<int>(m_stText.length()), wText.data(), wTextMax);
+		const int wTextLen = Ymir_MultiByteToWideChar(codePage, 0, m_stText.c_str(),
+			static_cast<int>(m_stText.length()), wText.data(), wTextMax);
 
 		std::wstring wRenderText;
-		if (m_isSecret && wTextLen > 0)
+		if (m_isSecret && wTextLen > 0) [[unlikely]]
 		{
-			wRenderText = std::wstring(wTextLen, L'*');
+			wRenderText.assign(wTextLen, L'*');
 		}
 		else
 		{
-			wRenderText = std::wstring(wText.data(), wTextLen);
+			wRenderText.assign(wText.data(), wTextLen);
 		}
 
 		float fStanX = m_v3Position.x;
 		float fStanY = m_v3Position.y;
 
-		// Use the dimensions calculated in Update() to align the text.
+		// Use the dimensions calculated in Update() to align the text
 		if (m_hAlign == HORIZONTAL_ALIGN_CENTER)
 			fStanX -= m_textWidth / 2.0f;
 		else if (m_hAlign == HORIZONTAL_ALIGN_RIGHT)
@@ -443,52 +445,53 @@ void CGraphicTextInstance::Render(RECT * pClipRect)
 		else if (m_vAlign == VERTICAL_ALIGN_BOTTOM)
 			fStanY -= m_textHeight;
 
-		// Call the appropriate rendering function from ImGuiManager.
+		// Call the appropriate rendering function from ImGuiManager with specified layer
 		if (m_isOutline)
-		{
-			CImGuiManager::Instance().RenderTextWithOutlineW(wRenderText, fStanX, fStanY, m_dwTextColor, m_dwOutLineColor, CImGuiManager::ERenderLayer::Background);
-		}
+			CImGuiManager::Instance().RenderTextWithOutlineW(wRenderText, fStanX, fStanY, m_dwTextColor, m_dwOutLineColor, layer);
 		else
-		{
-			CImGuiManager::Instance().RenderTextW(wRenderText, fStanX, fStanY, m_dwTextColor, CImGuiManager::ERenderLayer::Background);
-		}
+			CImGuiManager::Instance().RenderTextW(wRenderText, fStanX, fStanY, m_dwTextColor, layer);
 
-		// Drawing the cursor, if enabled.
-		if (m_isCursor)
+		// Drawing the cursor, if enabled
+		if (m_isCursor) [[unlikely]]
 		{
 			const int curpos = CIME::GetCurPos();
 			const int compend = curpos + CIME::GetCompLen();
 			int widthToCursor = 0;
+
 			if (!wRenderText.empty() && curpos > 0)
 			{
 				const int actualCurPos = std::min(curpos, static_cast<int>(wRenderText.length()));
 				if (actualCurPos > 0)
 				{
-					std::wstring wTextToCursor = wRenderText.substr(0, actualCurPos);
+					const std::wstring_view wTextToCursor(wRenderText.data(), actualCurPos);
 					CImGuiManager::Instance().GetTextExtentW(wTextToCursor, &widthToCursor, nullptr);
 				}
 			}
 
-			float cursorX = fStanX + widthToCursor;
-			float cursorY = fStanY;
-			float cursorWidth = 2.0f;
-			float cursorHeight = (m_textHeight > 0) ? static_cast<float>(m_textHeight) : 14.0f;
-			ImU32 cursorColor = (curpos < compend) ? IM_COL32(255, 255, 255, 128) : IM_COL32(255, 255, 255, 255);
+			const float cursorX = fStanX + widthToCursor;
+			const float cursorY = fStanY;
+			constexpr float cursorWidth = 2.0f;
+			const float cursorHeight = (m_textHeight > 0) ? static_cast<float>(m_textHeight) : 14.0f;
+			const ImU32 cursorColor = (curpos < compend) ? IM_COL32(255, 255, 255, 128) : IM_COL32(255, 255, 255, 255);
+
 			ImDrawList* drawList = ImGui::GetForegroundDrawList();
-			drawList->AddRectFilled(ImVec2(cursorX, cursorY), ImVec2(cursorX + cursorWidth, cursorY + cursorHeight), cursorColor);
+			drawList->AddRectFilled(ImVec2(cursorX, cursorY),
+				ImVec2(cursorX + cursorWidth, cursorY + cursorHeight), cursorColor);
 
 			if (curpos < compend)
 			{
-				int ulbegin = CIME::GetULBegin();
-				int ulend = CIME::GetULEnd();
+				const int ulbegin = CIME::GetULBegin();
+				const int ulend = CIME::GetULEnd();
 				if (ulbegin < ulend)
 				{
-					float underlineY = cursorY + cursorHeight;
-					drawList->AddLine(ImVec2(cursorX, underlineY), ImVec2(cursorX + cursorWidth, underlineY + 2.0f), IM_COL32(255, 0, 0, 255), 2.0f);
+					const float underlineY = cursorY + cursorHeight;
+					drawList->AddLine(ImVec2(cursorX, underlineY),
+						ImVec2(cursorX + cursorWidth, underlineY + 2.0f),
+						IM_COL32(255, 0, 0, 255), 2.0f);
 				}
 			}
 		}
-		return; // Exit the function to avoid executing the fallback code.
+		return;
 	}
 
 	// Fallback to old rendering (GDI/Direct3D)

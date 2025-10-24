@@ -4,6 +4,7 @@
 #include "imgui.h"
 #include "imgui_impl_dx9.h"
 #include "imgui_impl_win32.h"
+#include "StateManager.h"
 
 #ifdef IMGUI_ENABLE_FREETYPE
 #include "imgui_freetype.h"
@@ -48,6 +49,10 @@ bool CImGuiManager::Initialize(HWND hWnd, LPDIRECT3DDEVICE9 pDevice)
 	io.IniFilename = nullptr;
 	io.LogFilename = nullptr;
 
+	// Configure ImGui flags for Metin2 integration
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable keyboard navigation
+	io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;   // Don't let ImGui change the mouse cursor (Metin2 manages it)
+
 	if (!ImGui_ImplWin32_Init(hWnd))
 		return false;
 
@@ -58,6 +63,7 @@ bool CImGuiManager::Initialize(HWND hWnd, LPDIRECT3DDEVICE9 pDevice)
 	}
 
 	ImGui::StyleColorsDark();
+
 	m_bInitialized = true;
 	return true;
 }
@@ -67,14 +73,16 @@ void CImGuiManager::Shutdown()
 	if (!m_bInitialized)
 		return;
 
+	// Clear font resources before destroying ImGui context
 	m_mapFonts.clear();
 	m_strActiveFontName.clear();
 
+	// Shutdown ImGui implementations in reverse order of initialization
 	ImGui_ImplDX9_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
-	// CHANGE: Nullify pointers for safety
+	// Reset all member variables to safe defaults
 	m_hWnd = nullptr;
 	m_pDevice = nullptr;
 	m_bInitialized = false;
@@ -387,7 +395,7 @@ bool CImGuiManager::LoadFontFromMemory(std::string_view fontName, std::span<cons
 
 bool CImGuiManager::SetActiveFont(std::string_view fontName)
 {
-	if (m_mapFonts.find(fontName) == m_mapFonts.end()) return false;
+	if (!m_mapFonts.contains(fontName)) return false;
 	m_strActiveFontName = fontName;
 	return true;
 }
@@ -395,27 +403,91 @@ bool CImGuiManager::SetActiveFont(std::string_view fontName)
 ImFont* CImGuiManager::GetFont(std::string_view fontName) const noexcept
 {
 	if (fontName.empty()) fontName = m_strActiveFontName;
-	auto it = m_mapFonts.find(fontName);
-	return (it != m_mapFonts.end()) ? it->second.pFont : nullptr;
+	if (auto it = m_mapFonts.find(fontName); it != m_mapFonts.end())
+		return it->second.pFont;
+	return nullptr;
 }
 
-void CImGuiManager::BeginFrame() noexcept { if (m_bInitialized) { ImGui_ImplDX9_NewFrame(); ImGui_ImplWin32_NewFrame(); ImGui::NewFrame(); } }
-void CImGuiManager::EndFrame() noexcept { if (m_bInitialized) ImGui::EndFrame(); }
-void CImGuiManager::Render() noexcept { if (m_bInitialized) { ImGui::Render(); ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData()); } }
-void CImGuiManager::FlushAndRestart() noexcept { if (m_bInitialized) { EndFrame(); Render(); BeginFrame(); } }
+void CImGuiManager::BeginFrame() noexcept
+{
+	if (m_bInitialized)
+	{
+		ImGui_ImplDX9_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+	}
+}
+
+void CImGuiManager::EndFrame() noexcept
+{
+	if (m_bInitialized)
+		ImGui::EndFrame();
+}
+
+void CImGuiManager::Render() noexcept
+{
+	if (!m_bInitialized)
+		return;
+
+	// Save current DirectX9 render states to prevent interference with game rendering
+	const DWORD savedZEnable = STATEMANAGER.GetRenderState(D3DRS_ZENABLE);
+	const DWORD savedAlphaBlendEnable = STATEMANAGER.GetRenderState(D3DRS_ALPHABLENDENABLE);
+	const DWORD savedScissorTestEnable = STATEMANAGER.GetRenderState(D3DRS_SCISSORTESTENABLE);
+
+	// Set render states for ImGui rendering (2D overlay, no depth testing)
+	STATEMANAGER.SetRenderState(D3DRS_ZENABLE, FALSE);
+	STATEMANAGER.SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	STATEMANAGER.SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+
+	// Render ImGui draw data
+	ImGui::Render();
+	ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+
+	// Restore original render states for game rendering
+	STATEMANAGER.SetRenderState(D3DRS_ZENABLE, savedZEnable);
+	STATEMANAGER.SetRenderState(D3DRS_ALPHABLENDENABLE, savedAlphaBlendEnable);
+	STATEMANAGER.SetRenderState(D3DRS_SCISSORTESTENABLE, savedScissorTestEnable);
+}
+
+void CImGuiManager::FlushAndRestart() noexcept
+{
+	if (m_bInitialized)
+	{
+		EndFrame();
+		Render();
+		BeginFrame();
+	}
+}
+
+ImDrawList* CImGuiManager::GetDrawListForLayer(ERenderLayer layer) noexcept
+{
+	// Map layer enum to appropriate ImGui DrawList with z-order consideration
+	// Background and UI layers use Background DrawList
+	// Foreground uses Foreground DrawList
+
+	const int layerValue = static_cast<int>(layer);
+
+	if (layerValue >= static_cast<int>(ERenderLayer::Foreground))
+	{
+		return ImGui::GetForegroundDrawList();
+	}
+	else
+	{
+		return ImGui::GetBackgroundDrawList();
+	}
+}
 
 void CImGuiManager::RenderText(std::string_view text, float x, float y, unsigned long color, ERenderLayer layer)
 {
-	if (!m_bInitialized || text.empty()) return;
-	
-	auto it = m_mapFonts.find(m_strActiveFontName);
-	if (it == m_mapFonts.end()) return;
+	if (!m_bInitialized || text.empty()) [[unlikely]]
+		return;
 
-	ImDrawList* drawList = (layer == ERenderLayer::Foreground) 
-		? ImGui::GetForegroundDrawList() 
-		: ImGui::GetBackgroundDrawList();
-	
-	drawList->AddText(it->second.pFont, it->second.fontSize, ImVec2(x, y), 
+	auto it = m_mapFonts.find(m_strActiveFontName);
+	if (it == m_mapFonts.end()) [[unlikely]]
+		return;
+
+	ImDrawList* drawList = GetDrawListForLayer(layer);
+	drawList->AddText(it->second.pFont, it->second.fontSize, ImVec2(x, y),
 		__ConvertD3DColorToImGuiColor(color), text.data(), text.data() + text.size());
 }
 
@@ -437,29 +509,27 @@ void CImGuiManager::RenderTextW(std::wstring_view text, float x, float y, unsign
 
 void CImGuiManager::RenderTextWithOutline(std::string_view text, float x, float y, unsigned long textColor, unsigned long outlineColor, ERenderLayer layer)
 {
-	if (!m_bInitialized || text.empty()) return;
-	
+	if (!m_bInitialized || text.empty()) [[unlikely]]
+		return;
+
 	auto it = m_mapFonts.find(m_strActiveFontName);
-	if (it == m_mapFonts.end()) return;
+	if (it == m_mapFonts.end()) [[unlikely]]
+		return;
 
 	const int thickness = it->second.outlineThickness;
-	if (thickness <= 0)
+	if (thickness <= 0) [[unlikely]]
 	{
 		RenderText(text, x, y, textColor, layer);
 		return;
 	}
 
-	ImDrawList* drawList = (layer == ERenderLayer::Foreground) 
-		? ImGui::GetForegroundDrawList() 
-		: ImGui::GetBackgroundDrawList();
-	
+	ImDrawList* drawList = GetDrawListForLayer(layer);
 	const ImU32 imOutlineColor = __ConvertD3DColorToImGuiColor(outlineColor);
 	const ImU32 imTextColor = __ConvertD3DColorToImGuiColor(textColor);
-	const char* textStart = text.data();
-	const char* textEnd = text.data() + text.size();
+	const char* const textStart = text.data();
+	const char* const textEnd = textStart + text.size();
 	const float offset = static_cast<float>(thickness);
-	
-	ImFont* font = it->second.pFont;
+	ImFont* const font = it->second.pFont;
 	const float fontSize = it->second.fontSize;
 
 	// 8-directional outline for better quality
@@ -472,7 +542,7 @@ void CImGuiManager::RenderTextWithOutline(std::string_view text, float x, float 
 	drawList->AddText(font, fontSize, ImVec2(x,          y + offset), imOutlineColor, textStart, textEnd);
 	drawList->AddText(font, fontSize, ImVec2(x + offset, y + offset), imOutlineColor, textStart, textEnd);
 
-	// Main text
+	// Main text on top
 	drawList->AddText(font, fontSize, ImVec2(x, y), imTextColor, textStart, textEnd);
 }
 
@@ -482,81 +552,65 @@ void CImGuiManager::RenderTextWithOutlineW(std::wstring_view text, float x, floa
 	RenderTextWithOutline(WideToUtf8(text), x, y, textColor, outlineColor, layer);
 }
 
-void CImGuiManager::RenderTextEx(std::string_view fontName, std::string_view text, float x, float y, unsigned long color)
-{
-	if (!m_bInitialized || text.empty() || fontName.empty()) return;
-	
-	// Cache hit optimization - 90% of cases
-	if (m_strActiveFontName == fontName)
-	{
-		auto it = m_mapFonts.find(m_strActiveFontName);
-		if (it == m_mapFonts.end()) return;
-		
-		ImDrawList* drawList = ImGui::GetForegroundDrawList();
-		drawList->AddText(it->second.pFont, it->second.fontSize, ImVec2(x, y), 
-			__ConvertD3DColorToImGuiColor(color), text.data(), text.data() + text.size());
-		return;
-	}
-	
-	// Cache miss - single lookup
-	auto it = m_mapFonts.find(fontName);
-	if (it == m_mapFonts.end()) return;
-	
-	ImDrawList* drawList = ImGui::GetForegroundDrawList();
-	drawList->AddText(it->second.pFont, it->second.fontSize, ImVec2(x, y), 
-		__ConvertD3DColorToImGuiColor(color), text.data(), text.data() + text.size());
-}
-
-void CImGuiManager::RenderTextWithOutlineEx(std::string_view fontName, std::string_view text, float x, float y, unsigned long textColor, unsigned long outlineColor)
-{
-	if (!m_bInitialized || text.empty() || fontName.empty()) return;
-	
-	// Cache hit optimization - typical case when rendering multiple texts with same font
-	if (m_strActiveFontName == fontName)
-	{
-		RenderTextWithOutline(text, x, y, textColor, outlineColor, ERenderLayer::Foreground);
-		return;
-	}
-	
-	// Cache miss - single lookup and update
-	auto it = m_mapFonts.find(fontName);
-	if (it == m_mapFonts.end()) return;
-	
-	m_strActiveFontName = fontName;
-	RenderTextWithOutline(text, x, y, textColor, outlineColor, ERenderLayer::Foreground);
-}
-
-
-void CImGuiManager::GetTextExtent(std::string_view text, int* width, int* height, 
+void CImGuiManager::GetTextExtent(std::string_view text, int* width, int* height,
 	std::string_view fontName) const
 {
 	if (width) *width = 0;
 	if (height) *height = 0;
-	if (!m_bInitialized || text.empty()) return;
 
-	// Direct lookup without temporary string allocation
-	auto it = fontName.empty() 
+	if (!m_bInitialized || text.empty()) [[unlikely]]
+		return;
+
+	auto it = fontName.empty()
 		? m_mapFonts.find(m_strActiveFontName)
 		: m_mapFonts.find(fontName);
-		
-	if (it == m_mapFonts.end()) return;
+
+	if (it == m_mapFonts.end()) [[unlikely]]
+		return;
 
 	const ImVec2 size = it->second.pFont->CalcTextSizeA(
-		it->second.fontSize, FLT_MAX, 0.0f, 
+		it->second.fontSize, FLT_MAX, 0.0f,
 		text.data(), text.data() + text.size());
-	
+
 	if (width) *width = static_cast<int>(size.x);
 	if (height) *height = static_cast<int>(size.y);
 }
 
 void CImGuiManager::GetTextExtentW(std::wstring_view text, int* width, int* height, std::string_view fontName) const
 {
-	if (text.empty()) { if (width) *width = 0; if (height) *height = 0; return; }
+	if (text.empty())
+	{
+		if (width) *width = 0;
+		if (height) *height = 0;
+		return;
+	}
 	GetTextExtent(WideToUtf8(text), width, height, fontName);
 }
 
 void CImGuiManager::OnLostDevice() noexcept { if (m_bInitialized) ImGui_ImplDX9_InvalidateDeviceObjects(); }
 void CImGuiManager::OnResetDevice() noexcept { if (m_bInitialized) ImGui_ImplDX9_CreateDeviceObjects(); }
+
+bool CImGuiManager::WantCaptureKeyboard() const noexcept
+{
+	// Early exit if not initialized - avoids ImGui::GetIO() call
+	if (!m_bInitialized) [[unlikely]]
+		return false;
+
+	// Cache IO reference to avoid multiple function calls
+	const ImGuiIO& io = ImGui::GetIO();
+	return io.WantCaptureKeyboard;
+}
+
+bool CImGuiManager::WantCaptureMouse() const noexcept
+{
+	// Early exit if not initialized - avoids ImGui::GetIO() call
+	if (!m_bInitialized) [[unlikely]]
+		return false;
+
+	// Cache IO reference to avoid multiple function calls
+	const ImGuiIO& io = ImGui::GetIO();
+	return io.WantCaptureMouse;
+}
 
 constexpr unsigned int CImGuiManager::__ConvertD3DColorToImGuiColor(unsigned long d3dColor) noexcept
 {

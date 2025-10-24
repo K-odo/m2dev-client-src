@@ -3,6 +3,7 @@
 
 #include "Pool.h"
 #include "GrpText.h"
+#include "ImGuiManager.h"  // For ERenderLayer
 
 class CGraphicTextInstance
 {
@@ -34,7 +35,7 @@ class CGraphicTextInstance
 		void Destroy();
 		
 		void Update();
-		void Render(RECT * pClipRect = NULL);
+		void Render(RECT * pClipRect = NULL, CImGuiManager::ERenderLayer layer = CImGuiManager::ERenderLayer::UI_Base);
 
 		void ShowCursor();
 		void HideCursor();

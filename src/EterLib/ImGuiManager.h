@@ -73,22 +73,25 @@ public:
 	// Flush and restart frame
 	void FlushAndRestart() noexcept;
 
-	// Render layer control
+	// Render layer control with z-order depth
+	// Lower values render first (behind), higher values render last (in front)
 	enum class ERenderLayer : int
 	{
-		Background = 0,
-		Foreground = 1,
+		Background = 0,      // Default background layer for UI elements
+		UI_Base = 100,       // Base UI layer (non-floating windows)
+		UI_Float = 200,      // Floating windows layer (FLAG_FLOAT)
+		UI_Top = 300,        // Top-most UI elements
+		Foreground = 1000,   // Foreground layer for tooltips, cursors, etc.
 	};
+
+	// Helper to get DrawList for a specific layer
+	static ImDrawList* GetDrawListForLayer(ERenderLayer layer) noexcept;
 
 	// Text rendering functions
 	void RenderText(std::string_view text, float x, float y, unsigned long color, ERenderLayer layer = ERenderLayer::Background);
 	void RenderTextW(std::wstring_view text, float x, float y, unsigned long color, ERenderLayer layer = ERenderLayer::Background);
 	void RenderTextWithOutline(std::string_view text, float x, float y, unsigned long textColor, unsigned long outlineColor, ERenderLayer layer = ERenderLayer::Background);
 	void RenderTextWithOutlineW(std::wstring_view text, float x, float y, unsigned long textColor, unsigned long outlineColor, ERenderLayer layer = ERenderLayer::Background);
-
-	// Advanced rendering
-	void RenderTextEx(std::string_view fontName, std::string_view text, float x, float y, unsigned long color);
-	void RenderTextWithOutlineEx(std::string_view fontName, std::string_view text, float x, float y, unsigned long textColor, unsigned long outlineColor);
 
 	// Text measurement
 	void GetTextExtent(std::string_view text, int* width, int* height, std::string_view fontName = "") const;
@@ -103,6 +106,8 @@ public:
 
 	// Accessors
 	[[nodiscard]] bool IsInitialized() const noexcept { return m_bInitialized; }
+	[[nodiscard]] bool WantCaptureKeyboard() const noexcept;
+	[[nodiscard]] bool WantCaptureMouse() const noexcept;
 
 	// Singleton access
 	static CImGuiManager& Instance();

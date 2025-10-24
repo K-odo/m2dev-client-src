@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include "EterBase/Utils.h"
+#include "EterLib/ImGuiManager.h"  // For ERenderLayer
 
 namespace UI
 {
@@ -98,7 +100,7 @@ namespace UI
 
 			void			AddFlag(DWORD flag)		{ SET_BIT(m_dwFlag, flag);		}
 			void			RemoveFlag(DWORD flag)	{ REMOVE_BIT(m_dwFlag, flag);	}
-			bool			IsFlag(DWORD flag)		{ return (m_dwFlag & flag) ? true : false;	}
+			bool			IsFlag(DWORD flag) const		{ return (m_dwFlag & flag) ? true : false;	}
 
 
 			void			EnableScissorRect();
@@ -189,6 +191,29 @@ namespace UI
 
 			BOOL				m_isUpdatingChildren;
 			TWindowContainer	m_pReserveChildList;
+
+			// Helper to determine render layer based on window flags and z-order
+			CImGuiManager::ERenderLayer GetRenderLayer() const
+			{
+				int baseLayer = IsFlag(FLAG_FLOAT)
+					? static_cast<int>(CImGuiManager::ERenderLayer::UI_Float)
+					: static_cast<int>(CImGuiManager::ERenderLayer::UI_Base);
+
+				// Calculate z-order index: find our position in parent's child list
+				int zOrderIndex = 0;
+				if (m_pParent)
+				{
+					const auto& childList = m_pParent->m_pChildList;
+					auto it = std::find(childList.begin(), childList.end(), this);
+					if (it != childList.end())
+					{
+						zOrderIndex = static_cast<int>(std::distance(childList.begin(), it));
+					}
+				}
+
+				// Return layer with z-order offset (lower index = renders first = behind)
+				return static_cast<CImGuiManager::ERenderLayer>(baseLayer + zOrderIndex);
+			}
 		
 #ifdef _DEBUG
 		public:

@@ -237,16 +237,11 @@ namespace UI
 				CPythonGraphic::Instance().RenderBox2d(m_rect.left, m_rect.top, m_rect.right, m_rect.bottom);
 			}
 
-			// Render children with ImGui flush between floating windows for correct z-order
 			for (auto* pChild : m_pChildList)
 			{
 				pChild->Render();
-
-				// Flush ImGui texts after each top-level floating window
-				if (pChild->IsFlag(CWindow::FLAG_FLOAT) && CImGuiManager::Instance().IsInitialized())
-				{
-					CImGuiManager::Instance().FlushAndRestart();
-				}
+				// Flush ImGui after each child window to ensure proper z-order
+				CImGuiManager::Instance().FlushAndRestart();
 			}
 		}
 		else 
@@ -259,16 +254,11 @@ namespace UI
 				CPythonGraphic::Instance().RenderBox2d(m_rect.left, m_rect.top, m_rect.right, m_rect.bottom);
 			}
 
-			// Render children with ImGui flush between floating windows for correct z-order
 			for (auto* pChild : m_pChildList)
 			{
 				pChild->Render();
-
-				// Flush ImGui texts after each top-level floating window
-				if (pChild->IsFlag(CWindow::FLAG_FLOAT) && CImGuiManager::Instance().IsInitialized())
-				{
-					CImGuiManager::Instance().FlushAndRestart();
-				}
+				// Flush ImGui after each child window to ensure proper z-order
+				CImGuiManager::Instance().FlushAndRestart();
 			}
 		}
 	}
@@ -1167,7 +1157,11 @@ namespace UI
 	void CTextLine::OnRender()
 	{
 		if (IsShow())
-			m_TextInstance.Render();
+		{
+			// Use parent window's render layer based on FLAG_FLOAT
+			CImGuiManager::ERenderLayer layer = GetRenderLayer();
+			m_TextInstance.Render(nullptr, layer);
+		}
 	}
 
 	void CTextLine::OnChangePosition()
