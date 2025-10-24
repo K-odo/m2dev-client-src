@@ -318,17 +318,28 @@ bool CPythonApplication::Process()
 #endif
 	//////////////////////
 	// Input Process
-	// Keyboard
-	UpdateKeyboard();
+	// Cache ImGui input capture state to avoid multiple singleton/function calls
+	CImGuiManager& imguiMgr = CImGuiManager::Instance();
+	const bool imguiWantsKeyboard = imguiMgr.WantCaptureKeyboard();
+	const bool imguiWantsMouse = imguiMgr.WantCaptureMouse();
+
+	// Keyboard - only process if ImGui doesn't want keyboard input
+	if (!imguiWantsKeyboard)
+	{
+		UpdateKeyboard();
+	}
 #ifdef __PERFORMANCE_CHECK__
 	DWORD dwUpdateTime4=ELTimer_GetMSec();
 #endif
-	// Mouse
-	POINT Point;
-	if (GetCursorPos(&Point))
+	// Mouse - only process if ImGui doesn't want mouse input
+	if (!imguiWantsMouse)
 	{
-		ScreenToClient(m_hWnd, &Point);
-		OnMouseMove(Point.x, Point.y);		
+		POINT Point;
+		if (GetCursorPos(&Point))
+		{
+			ScreenToClient(m_hWnd, &Point);
+			OnMouseMove(Point.x, Point.y);
+		}
 	}
 	//////////////////////
 #ifdef __PERFORMANCE_CHECK__
@@ -539,16 +550,17 @@ bool CPythonApplication::Process()
 				rkBG.ReleaseCharacterShadowTexture();
 
 				// Notify ImGui about lost device
-				if (CImGuiManager::Instance().IsInitialized())
-					CImGuiManager::Instance().OnLostDevice();
+				CImGuiManager& imguiMgr = CImGuiManager::Instance();
+				if (imguiMgr.IsInitialized())
+					imguiMgr.OnLostDevice();
 
 				if (m_pyGraphic.RestoreDevice())
 				{
 					rkBG.CreateCharacterShadowTexture();
 
 					// Notify ImGui about device reset
-					if (CImGuiManager::Instance().IsInitialized())
-						CImGuiManager::Instance().OnResetDevice();
+					if (imguiMgr.IsInitialized())
+						imguiMgr.OnResetDevice();
 				}
 				else
 					canRender = false;
@@ -584,19 +596,18 @@ bool CPythonApplication::Process()
 				m_pyGraphic.SetInterfaceRenderState();
 
 				// ImGui BeginFrame BEFORE UI rendering to collect draw commands
-				if (CImGuiManager::Instance().IsInitialized())
-				{
-					CImGuiManager::Instance().BeginFrame();
-				}
+				CImGuiManager& imguiMgr = CImGuiManager::Instance();
+				if (imguiMgr.IsInitialized()) [[likely]]
+					imguiMgr.BeginFrame();
 
 				OnUIRender();
 				OnMouseRender();
 
 				// ImGui EndFrame/Render AFTER UI rendering but BEFORE End() for proper z-order
-				if (CImGuiManager::Instance().IsInitialized())
+				if (imguiMgr.IsInitialized()) [[likely]]
 				{
-					CImGuiManager::Instance().EndFrame();
-					CImGuiManager::Instance().Render();
+					imguiMgr.EndFrame();
+					imguiMgr.Render();
 				}
 				/////////////////////
 
